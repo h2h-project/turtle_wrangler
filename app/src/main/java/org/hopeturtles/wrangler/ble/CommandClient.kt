@@ -1,5 +1,6 @@
 package org.hopeturtles.wrangler.ble
 
+import android.util.Log
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -109,7 +110,9 @@ class CommandClient(private val link: TurtleConnection) {
         val done = CompletableDeferred<ByteArray>().also { final = it }
 
         val frame = byteArrayOf(opcode.toByte(), mySeq.toByte()) + payload
+        Log.i("CommandClient", "send op 0x%02x seq %d (%d bytes)".format(opcode, mySeq, frame.size))
         if (!link.write(TurtleUuids.COMMAND_SERVICE, TurtleUuids.COMMAND, frame)) {
+            Log.w("CommandClient", "op 0x%02x seq %d: write refused".format(opcode, mySeq))
             return@withLock CommandResult(ResultCode.NOT_CONNECTED, ByteArray(0), -2)
         }
 
@@ -126,8 +129,12 @@ class CommandClient(private val link: TurtleConnection) {
             _progress.value = null
         }
         waitingSeq = -1
-        if (result == null) return@withLock CommandResult(ResultCode.TIMEOUT, ByteArray(0), -1)
+        if (result == null) {
+            Log.w("CommandClient", "op 0x%02x seq %d -> TIMEOUT".format(opcode, mySeq))
+            return@withLock CommandResult(ResultCode.TIMEOUT, ByteArray(0), -1)
+        }
         val raw = result[2].toInt() and 0xFF
+        Log.i("CommandClient", "op 0x%02x seq %d -> 0x%02x %s".format(opcode, mySeq, raw, ResultCode.of(raw)))
         CommandResult(ResultCode.of(raw), result.copyOfRange(3, result.size), raw)
     }
 }

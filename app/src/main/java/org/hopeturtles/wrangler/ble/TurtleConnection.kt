@@ -82,6 +82,15 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
     private var mtu = 23
     val currentMtu: Int get() = mtu
 
+    // True between STATE_CONNECTED and STATE_DISCONNECTED. prepare() checks it
+    // after every step so a mid-setup drop ends setup with the real reason
+    // instead of carrying on into misleading failures.
+    @Volatile private var linkUp = false
+
+    // Android often drops the very first link a few hundred ms in (status 22,
+    // "terminated by local host"). A drop during setup gets one quiet retry.
+    private var setupRetries = 0
+
     // One pending deferred per operation type; the queue guarantees only one
     // operation is in flight, so these never overlap.
     private var pendingMtu: CompletableDeferred<Int>? = null
@@ -93,6 +102,18 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
     fun connect() {
         _state.value = LinkState.Connecting
         gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
+    }
+
+    private fun retrySetup() {
+        setupRetries += 1
+        Log.i(TAG, "link dropped during setup — retrying ($setupRetries)")
+        try { gatt?.close() } catch (_: Exception) {}
+        gatt = null
+        _state.value = LinkState.Preparing("Retrying")
+        scope.launch {
+            kotlinx.coroutines.delay(600)
+            gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
+        }
     }
 
     fun disconnect() {
@@ -163,9 +184,11 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
         val g = gatt ?: return
         _state.value = LinkState.Preparing("Negotiating")
         queue.run<Int> { done -> pendingMtu = done; g.requestMtu(PREFERRED_MTU) }
+        if (!linkUp) return
 
         _state.value = LinkState.Preparing("Discovering services")
         val ok = queue.run<Boolean> { done -> pendingDiscover = done; g.discoverServices() } ?: false
+        if (!linkUp) return
         if (!ok || g.getService(TurtleUuids.TURTLE_SERVICE) == null) {
             fail("Not a turtle (Turtle service missing)")
             return
@@ -173,6 +196,7 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
 
         _state.value = LinkState.Preparing("Checking contract")
         val info = read(TurtleUuids.TURTLE_SERVICE, TurtleUuids.CONTRACT_INFO)?.let(TurtleCodec::contractInfo)
+        if (!linkUp) return
         if (info == null) {
             fail("Couldn't read the contract version")
             return
@@ -187,10 +211,13 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
             read(TurtleUuids.TURTLE_SERVICE, uuid)?.let { apply(uuid, it) }
         }
 
+        if (!linkUp) return
         _state.value = LinkState.Preparing("Subscribing")
         for (uuid in TurtleUuids.TELEMETRY) enableNotify(TurtleUuids.TURTLE_SERVICE, uuid)
         if (!readOnly) enableNotify(TurtleUuids.COMMAND_SERVICE, TurtleUuids.RESULT)
 
+        if (!linkUp) return
+        setupRetries = 0
         _state.value = LinkState.Ready(readOnly)
         Log.i(TAG, "ready: ${name} contract v${info.contractVersion} mtu=$mtu readOnly=$readOnly")
     }
@@ -248,10 +275,17 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
     private val callback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
+                linkUp = true
                 scope.launch { prepare() }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                linkUp = false
                 failPending()
                 val prior = _state.value
+                val inSetup = prior is LinkState.Connecting || prior is LinkState.Preparing
+                if (inSetup && status != BluetoothGatt.GATT_SUCCESS && setupRetries < 1) {
+                    retrySetup()
+                    return
+                }
                 if (prior !is LinkState.Disconnected) {
                     _state.value = LinkState.Disconnected(
                         if (status == BluetoothGatt.GATT_SUCCESS) null else "Link lost (status $status)")

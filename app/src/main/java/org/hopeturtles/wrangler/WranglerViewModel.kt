@@ -7,6 +7,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -124,7 +125,8 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
         _notice.value = Notice(
             "On the turtle: triple-click, then single-click three times to open its " +
                 "Bluetooth screen. Enter the 6-digit code it shows.", true)
-        dev.createBond()
+        val started = dev.createBond()
+        Log.i("Wrangler", "createBond -> $started (bondState ${dev.bondState})")
     }
 
     private val bondReceiver = object : BroadcastReceiver() {
@@ -135,6 +137,7 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
             if (d?.address != dev.address) return
             val state = i.getIntExtra(BluetoothDevice.EXTRA_BOND_STATE, BluetoothDevice.BOND_NONE)
             _bondState.value = state
+            Log.i("Wrangler", "bond state -> $state")
             if (state == BluetoothDevice.BOND_BONDED) _notice.value = Notice("Paired.", true)
         }
     }
