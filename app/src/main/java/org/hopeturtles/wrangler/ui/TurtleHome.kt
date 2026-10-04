@@ -65,7 +65,11 @@ fun TurtleHome(
         is LinkState.Disconnected -> "Disconnected" to false
     }
     Scaffold(
-        topBar = { WranglerTopBar("🐢 ${tel.name ?: "Turtle"}", statusText, ok, onSettings) },
+        topBar = {
+            // Once the link has dropped, the status is the way back: tap to scan again.
+            WranglerTopBar("🐢 ${tel.name ?: "Turtle"}", statusText, ok, onSettings,
+                onStatusClick = if (state is LinkState.Disconnected) onDisconnect else null)
+        },
         bottomBar = {
             NavigationBar(containerColor = Wrangler.Surface) {
                 Tab.entries.forEach { t ->

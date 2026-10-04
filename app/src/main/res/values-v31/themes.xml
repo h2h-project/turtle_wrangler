@@ -1,0 +1,10 @@
+<resources>
+    <!-- Android 12+ always shows a system launch splash. Make it plain green
+         with no icon so it hands off seamlessly to the animated turtle
+         splash (ui/SplashScreen.kt). -->
+    <style name="Theme.Wrangler" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">#FFF2F9F3</item>
+        <item name="android:windowSplashScreenBackground">#FF017919</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@android:color/transparent</item>
+    </style>
+</resources>

@@ -29,14 +29,30 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.hopeturtles.wrangler.ui.theme.Wrangler
 
-/** Top bar on every screen: title, link status, settings gear top-right. */
+/**
+ * Top bar on every screen: title, link status, settings gear top-right.
+ * With [onStatusClick] the status becomes a button (e.g. "Disconnected · Scan").
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun WranglerTopBar(title: String, status: String?, statusOk: Boolean, onSettings: () -> Unit) {
+fun WranglerTopBar(
+    title: String, status: String?, statusOk: Boolean, onSettings: () -> Unit,
+    onStatusClick: (() -> Unit)? = null, statusAction: String = "Scan",
+) {
     TopAppBar(
         title = { Text(title, fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 18.sp) },
         actions = {
-            if (status != null) {
+            if (status != null && onStatusClick != null) {
+                OutlinedButton(
+                    onClick = onStatusClick,
+                    border = BorderStroke(1.dp, Wrangler.Primary),
+                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+                    modifier = Modifier.height(34.dp),
+                ) {
+                    Text("○ $status · $statusAction", color = Wrangler.Primary, fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold)
+                }
+            } else if (status != null) {
                 Text(
                     (if (statusOk) "● " else "○ ") + status,
                     color = if (statusOk) Wrangler.Primary else Wrangler.TextMuted,

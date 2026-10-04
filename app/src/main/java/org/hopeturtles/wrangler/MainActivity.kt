@@ -11,6 +11,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -41,6 +42,7 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.saveable.rememberSaveable
 import org.hopeturtles.wrangler.ui.Muted
 import org.hopeturtles.wrangler.ui.ScanScreen
+import org.hopeturtles.wrangler.ui.SplashScreen
 import org.hopeturtles.wrangler.ui.WCard
 import org.hopeturtles.wrangler.ui.WranglerTopBar
 import org.hopeturtles.wrangler.ui.theme.Wrangler
@@ -56,7 +58,17 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { WranglerTheme { App(vm) } }
+        setContent {
+            WranglerTheme {
+                // The splash covers the app while it starts underneath, then fades away.
+                // Saveable: a rotation or theme change doesn't replay it.
+                var splash by rememberSaveable { mutableStateOf(true) }
+                Box(Modifier.fillMaxSize()) {
+                    App(vm)
+                    if (splash) SplashScreen { splash = false }
+                }
+            }
+        }
     }
 }
 

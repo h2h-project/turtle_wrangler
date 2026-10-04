@@ -6,6 +6,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -70,21 +72,14 @@ fun DashboardTab(
 
         Column(Modifier.alpha(if (live) 1f else 0.5f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             HeadingCard(tel, live && !safe)
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                // Tap → full-screen charging graph.
-                Tile("Battery", tel.power?.socPct?.let { "$it%" },
-                    Modifier.weight(1f).clickable(onClick = onBattery)) {
-                    ChargeLine(tel.power?.currentMa)
-                    Muted(listOfNotNull(Format.volts(tel.power?.voltageMv), Format.current(tel.power?.currentMa))
-                        .joinToString(" · ").ifEmpty { "—" })
-                    val mv = battHistory.mapNotNull { it.mv }
-                    if (mv.size >= 2) Sparkline(mv)
-                    Muted("Tap for graph ›")
-                }
-                Tile("Sail angle", Format.degrees(tel.sail?.sailDeg), Modifier.weight(1f)) {
-                    Muted(tel.sail?.windDeg?.let { "wind ${Format.degrees(it)}" +
-                        (tel.sail?.confidencePct?.let { c -> " · $c% sure" } ?: "") } ?: "no wind yet")
-                }
+            // Tap → full-screen charging graph.
+            Tile("Battery", tel.power?.socPct?.let { "$it%" }, Modifier.clickable(onClick = onBattery)) {
+                ChargeLine(tel.power?.currentMa)
+                Muted(listOfNotNull(Format.volts(tel.power?.voltageMv), Format.current(tel.power?.currentMa))
+                    .joinToString(" · ").ifEmpty { "—" })
+                val mv = battHistory.mapNotNull { it.mv }
+                if (mv.size >= 2) Sparkline(mv)
+                Muted("Tap for graph ›")
             }
             // Control-bottle conditions — tap for the full-screen graphs.
             WCard(Modifier.clickable(onClick = onBottle)) {
@@ -109,11 +104,19 @@ fun DashboardTab(
                     Muted(Format.navState(nav?.state) ?: "—")
                 }
             }
-            WCard(Modifier.alpha(if (Format.fixStale(tel.position)) 0.6f else 1f)) {
-                CardLabel("Position")
-                Text(Format.latLon(tel.position?.lat, tel.position?.lon) ?: "—",
-                    color = Wrangler.Text, fontSize = 16.sp)
-                tel.position?.fixAgeS?.let { Muted("fix ${it}s old") }
+            Row(Modifier.height(IntrinsicSize.Min), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Tile("Sail angle", Format.degrees(tel.sail?.sailDeg), Modifier.weight(1f).fillMaxHeight()) {
+                    Muted(tel.sail?.windDeg?.let { "wind ${Format.degrees(it)}" +
+                        (tel.sail?.confidencePct?.let { c -> " · $c% sure" } ?: "") } ?: "no wind yet")
+                }
+                WCard(Modifier.weight(1f).fillMaxHeight().alpha(if (Format.fixStale(tel.position)) 0.6f else 1f)) {
+                    Muted("Position")
+                    // Half width: one coordinate per line.
+                    val ll = Format.latLon(tel.position?.lat, tel.position?.lon)?.split(", ")
+                    Text(ll?.joinToString("\n") ?: "—", color = Wrangler.Text, fontSize = 15.sp,
+                        fontWeight = FontWeight.Medium)
+                    tel.position?.fixAgeS?.let { Muted("fix ${it}s old") }
+                }
             }
         }
     }
