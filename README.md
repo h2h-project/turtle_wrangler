@@ -1,8 +1,11 @@
 # turtle_wrangler
 The Android app for wrangling hope turtles and their bales.
 
-**Turtle Wrangler** talks to a Hope Turtle directly over Bluetooth Low
-Energy from a few metres away. It's a full-screen replacement for clicking
+**Turtle Wrangler** is the way that we talk and make requests to hope turtles.  Its 
+a leap forward from the simple OLED and single action interface that we've been using so far.
+That said, it doesn't take its place.  Instead, it compliments.  Wrangler talks to a 
+Hope Turtle directly over Bluetooth Low
+Energy from a few metres away. It's a full-screen upgrade from clicking
 through the turtle's tiny OLED one button-press at a time. It doesn't
 replace the shore tracking at [hopeturtles.org](https://hopeturtles.org),
 and the turtle never needs a phone to navigate.
