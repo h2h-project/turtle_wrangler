@@ -131,3 +131,44 @@ fun ChargeLine(ma: Int?) {
             color = if (c == Format.Charge.CHARGING) Wrangler.Primary else Wrangler.TextMuted)
     }
 }
+
+/** What the last command did, as a card (pink text = it failed). */
+@Composable
+fun NoticeCard(notice: org.hopeturtles.wrangler.Notice?, busy: String?) {
+    val text = busy?.let { "$it…" } ?: notice?.text ?: return
+    val ok = busy != null || notice?.ok == true
+    WCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (busy != null) {
+                androidx.compose.material3.CircularProgressIndicator(
+                    Modifier.width(16.dp).height(16.dp), color = Wrangler.Primary, strokeWidth = 2.dp)
+                Spacer(Modifier.width(8.dp))
+            }
+            Text(text, color = if (ok) Wrangler.Dark else Wrangler.PinkDark, fontSize = 14.sp)
+        }
+    }
+}
+
+/** Yes/no before anything that changes where the turtle goes. */
+@Composable
+fun ConfirmDialog(
+    title: String, body: String, confirm: String, onConfirm: () -> Unit, onDismiss: () -> Unit,
+    dismiss: String = "Cancel",
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title, fontWeight = FontWeight.Bold, color = Wrangler.Dark) },
+        text = { Text(body, color = Wrangler.Text) },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = { onDismiss(); onConfirm() }) {
+                Text(confirm, color = Wrangler.Primary, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) {
+                Text(dismiss, color = Wrangler.TextMuted)
+            }
+        },
+        containerColor = Wrangler.Surface,
+    )
+}

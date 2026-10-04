@@ -49,6 +49,10 @@ fun TurtleHome(
     onTab: (Tab) -> Unit,
     bondState: Int,
     notice: Notice?,
+    busy: String?,
+    run: RunCommand,
+    say: (String, Boolean) -> Unit,
+    onPickOnMap: () -> Unit,
     onPair: () -> Unit,
     onTest: () -> Unit,
     onDisconnect: () -> Unit,
@@ -92,8 +96,10 @@ fun TurtleHome(
             }
             when (tab) {
                 Tab.DASHBOARD -> DashboardTab(tel, live, battHistory, onBattery, envHistory, onBottle)
-                Tab.NAVIGATE -> ComingSoon("Navigate", "App Phase 3: destination on a map, journey start/end, " +
-                    "cross-track gauge.")
+                Tab.NAVIGATE -> NavigateTab(
+                    tel, live, canCommand = state is LinkState.Ready && !state.readOnly,
+                    busy = busy, notice = notice, run = run, say = say, onPickOnMap = onPickOnMap,
+                )
                 Tab.GPS -> ComingSoon("GPS", "App Phase 4: switch to manual logging and stamp the turtle's " +
                     "position with one big button.")
                 Tab.DIAGNOSTICS -> LinkPanel(state, tel, bondState, notice, onPair, onTest, onDisconnect)

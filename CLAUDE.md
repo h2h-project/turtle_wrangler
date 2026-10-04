@@ -29,7 +29,8 @@ app/src/main/java/org/hopeturtles/wrangler/
 │   ├── TurtleScanner.kt   scan filtered on the Turtle service UUID
 │   ├── GattQueue.kt       ONE outstanding GATT op at a time (Android rule)
 │   ├── TurtleConnection.kt  GATT link: MTU → discover → contract check → read → subscribe
-│   └── CommandClient.kt   opcode/seq framing, IN_PROGRESS, timeouts, result messages
+│   ├── CommandClient.kt   opcode/seq framing, IN_PROGRESS, timeouts, result messages
+│   └── Payloads.kt        command payload encoders + OK-result payload decoders
 ├── data/LastSeenStore.kt  per-turtle "last seen" cache (never shown as live)
 └── ui/                    Compose screens + theme
 app/src/test/              JVM unit tests (decoders vs real Applemore bytes)
@@ -53,6 +54,11 @@ app/src/test/              JVM unit tests (decoders vs real Applemore bytes)
   place the turtle accepts pairing.
 - **"Here" means the turtle's position**, never the phone's
   (`DEST_SET_HERE`, journeys). Say so in the UI.
+- **Ask before changing where the turtle goes.** Destination and journey
+  commands go through `ConfirmDialog`; `vm.busy` disables buttons while a
+  command is in flight (the firmware runs one at a time).
+- **The map is the only internet use** (OpenFreeMap tiles, no key). Never
+  use the phone's location; the BLE permission text promises that.
 - **Public repo:** no keystores, `local.properties`, API keys or turtle
   credentials in git (see `.gitignore`).
 

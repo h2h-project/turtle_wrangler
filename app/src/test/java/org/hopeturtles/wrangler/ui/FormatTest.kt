@@ -64,4 +64,11 @@ class FormatTest {
         assertEquals("No waypoints configured", Format.fault(NavFault.NO_WAYPOINTS))
         assertNull(Format.fault(NavFault.NONE))
     }
+
+    @Test fun xte() {
+        assertEquals("on track", Format.xte(1))
+        assertEquals("12 m right of track", Format.xte(12))
+        assertEquals("7 m left of track", Format.xte(-7))
+        assertNull(Format.xte(null))
+    }
 }

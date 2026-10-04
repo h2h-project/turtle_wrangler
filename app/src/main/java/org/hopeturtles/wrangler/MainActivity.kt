@@ -30,6 +30,8 @@ import org.hopeturtles.wrangler.ui.CardLabel
 import org.hopeturtles.wrangler.ui.GreenOutlineButton
 import org.hopeturtles.wrangler.ui.BatteryGraphScreen
 import org.hopeturtles.wrangler.ui.BottleGraphScreen
+import org.hopeturtles.wrangler.ui.MapPickerScreen
+import org.hopeturtles.wrangler.ui.RunCommand
 import org.hopeturtles.wrangler.ui.Format
 import org.hopeturtles.wrangler.ui.Tab
 import org.hopeturtles.wrangler.ui.TurtleHome
@@ -102,6 +104,7 @@ private fun Main(vm: WranglerViewModel) {
     val lastSeen by vm.lastSeen.collectAsStateWithLifecycle()
     val bond by vm.bondState.collectAsStateWithLifecycle()
     val notice by vm.notice.collectAsStateWithLifecycle()
+    val busy by vm.busy.collectAsStateWithLifecycle()
     var showSettings by remember { mutableStateOf(false) }
 
     if (showSettings) {
@@ -130,6 +133,13 @@ private fun Main(vm: WranglerViewModel) {
         val env by vm.envHistory.collectAsStateWithLifecycle()
         var showBattery by rememberSaveable { mutableStateOf(false) }
         var showBottle by rememberSaveable { mutableStateOf(false) }
+        var showMap by rememberSaveable { mutableStateOf(false) }
+        val run: RunCommand = { label, op, payload, onResult -> vm.command(label, op, payload, onResult) }
+        val canCommand = state.let { it is LinkState.Ready && !it.readOnly }
+        if (showMap) {
+            MapPickerScreen(tel, canCommand, busy, notice, run, onBack = { showMap = false })
+            return
+        }
         if (showBattery) {
             BatteryGraphScreen(tel.name, batt, live, onBack = { showBattery = false })
             return
@@ -144,7 +154,8 @@ private fun Main(vm: WranglerViewModel) {
             envHistory = env,
             onBottle = { showBottle = true },
             tab = tab, onTab = { tab = it },
-            bondState = bond, notice = notice,
+            bondState = bond, notice = notice, busy = busy, run = run, say = vm::say,
+            onPickOnMap = { showMap = true },
             onPair = vm::pair,
             onTest = { vm.testCommand(tel) },
             onDisconnect = vm::disconnect,

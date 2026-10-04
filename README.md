@@ -18,10 +18,15 @@ The app's phased plan is
 
 ## Status
 
-**App Phase 1: BLE core.** It scans for turtles, connects, checks the
-contract version, reads Device Information and live values, pairs using
-the 6-digit code on the turtle's OLED, and round-trips a test command.
-The Dashboard, Navigate, GPS and Diagnostics tabs come next.
+**App Phases 1–3.**
+- **BLE core:** scan, connect, contract check, and pairing with the
+  6-digit code on the turtle's OLED.
+- **Dashboard:** live values, plus battery and bottle graphs.
+- **Navigate:** destination (set to the turtle's position, mission, pick
+  on map, clear), journey start/end, and the cross-track gauge.
+
+The GPS tab (manual position stamps) comes next. Map tiles are
+© OpenFreeMap © OpenMapTiles © OpenStreetMap contributors.
 
 ## Build
 

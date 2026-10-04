@@ -22,14 +22,13 @@ import org.hopeturtles.wrangler.ble.CommandResult
 import org.hopeturtles.wrangler.ble.FoundTurtle
 import org.hopeturtles.wrangler.ble.LinkState
 import org.hopeturtles.wrangler.ble.Op
+import org.hopeturtles.wrangler.ble.Payloads
 import org.hopeturtles.wrangler.ble.ResultCode
 import org.hopeturtles.wrangler.ble.TurtleConnection
 import org.hopeturtles.wrangler.ble.TurtleScanner
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
 import org.hopeturtles.wrangler.data.LastSeen
 import org.hopeturtles.wrangler.data.LastSeenStore
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 /** One battery reading; [ma] is the raw INA219 sign — negative = charging (contract v1). */
 data class BattSample(val tMs: Long, val mv: Int?, val ma: Int?, val soc: Int?)
@@ -194,17 +193,31 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------ commands
 
-    /** Run a command and turn its result into the notice line. */
+    /** Label of the command in flight, or null. Screens disable their buttons on it. */
+    private val _busy = MutableStateFlow<String?>(null)
+    val busy: StateFlow<String?> = _busy.asStateFlow()
+
+    /**
+     * Run a command and turn its result into the notice line. [onResult]
+     * runs after the generic notice is set, so it can replace it with
+     * something more specific via [say].
+     */
     fun command(label: String, opcode: Int, payload: ByteArray = ByteArray(0),
                 onResult: (CommandResult) -> Unit = {}) {
         val c = client ?: return
+        if (_busy.value != null) return
+        _busy.value = label                      // before launch: a double-tap can't send twice
         viewModelScope.launch {
             _notice.value = Notice("$label…", true)
-            val r = c.send(opcode, payload)
+            val r = try { c.send(opcode, payload) } finally { _busy.value = null }
             _notice.value = Notice("$label: ${r.message}", r.code.ok)
             if (r.code == ResultCode.NOT_BONDED) pair()
             onResult(r)
         }
+    }
+
+    fun say(text: String, ok: Boolean) {
+        _notice.value = Notice(text, ok)
     }
 
     /**
@@ -214,8 +227,7 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
      */
     fun testCommand(tel: TurtleTelemetry) {
         val secs = tel.status?.intervalS ?: 120
-        val p = ByteBuffer.allocate(2).order(ByteOrder.LITTLE_ENDIAN).putShort(secs.toShort()).array()
-        command("Test command", Op.TELEMETRY_SET_INTERVAL, p)
+        command("Test command", Op.TELEMETRY_SET_INTERVAL, Payloads.u16(secs))
     }
 
     override fun onCleared() {

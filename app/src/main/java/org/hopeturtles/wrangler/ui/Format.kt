@@ -54,6 +54,15 @@ object Format {
         }
     }
 
+    /** Cross-track error (+ = right of track): "on track" · "12 m right of track". */
+    fun xte(m: Int?): String? = m?.let {
+        when {
+            abs(it) <= 1 -> "on track"
+            it > 0 -> "$it m right of track"
+            else -> "${-it} m left of track"
+        }
+    }
+
     fun celsius(c: Double?): String? = c?.let { "%.1f °C".format(it) }
 
     fun volts(mv: Int?): String? = mv?.let { "%.2f V".format(it / 1000.0) }
