@@ -28,7 +28,13 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.hopeturtles.wrangler.ui.CardLabel
 import org.hopeturtles.wrangler.ui.GreenOutlineButton
-import org.hopeturtles.wrangler.ui.LinkScreen
+import org.hopeturtles.wrangler.ui.Format
+import org.hopeturtles.wrangler.ui.Tab
+import org.hopeturtles.wrangler.ui.TurtleHome
+import org.hopeturtles.wrangler.ble.LinkState
+import kotlinx.coroutines.delay
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.saveable.rememberSaveable
 import org.hopeturtles.wrangler.ui.Muted
 import org.hopeturtles.wrangler.ui.ScanScreen
 import org.hopeturtles.wrangler.ui.WCard
@@ -111,8 +117,18 @@ private fun Main(vm: WranglerViewModel) {
     } else {
         val state by current.state.collectAsStateWithLifecycle()
         val tel by current.telemetry.collectAsStateWithLifecycle()
-        LinkScreen(
-            state = state, tel = tel, bondState = bond, notice = notice,
+        val batt by vm.battHistory.collectAsStateWithLifecycle()
+        var tab by rememberSaveable { mutableStateOf(Tab.DASHBOARD) }
+        // Re-evaluate "live" every second: connected AND updated recently.
+        val now by produceState(System.currentTimeMillis()) {
+            while (true) { delay(1_000); value = System.currentTimeMillis() }
+        }
+        val live = state is LinkState.Ready && tel.lastUpdateMs > 0 &&
+            now - tel.lastUpdateMs < Format.LIVE_STALE_MS
+        TurtleHome(
+            state = state, tel = tel, live = live, battHistory = batt,
+            tab = tab, onTab = { tab = it },
+            bondState = bond, notice = notice,
             onPair = vm::pair,
             onTest = { vm.testCommand(tel) },
             onDisconnect = vm::disconnect,

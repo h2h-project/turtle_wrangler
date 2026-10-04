@@ -59,6 +59,12 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
 
     private var scanWatch: Job? = null
     private var snapshotJob: Job? = null
+    private var historyJob: Job? = null
+
+    /** Battery voltage (mV) samples for this connection — the Dashboard
+     *  sparkline. Voltage, not SoC: SoC moves in coarse 1 % steps. */
+    private val _battHistory = MutableStateFlow<List<Int>>(emptyList())
+    val battHistory: StateFlow<List<Int>> = _battHistory.asStateFlow()
 
     // ------------------------------------------------------------ scanning
 
@@ -91,6 +97,17 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
         _bondState.value = t.device.bondState
         _notice.value = null
         link.connect()
+        _battHistory.value = emptyList()
+        historyJob = viewModelScope.launch {
+            var last: Any? = null
+            link.telemetry.collect { t ->
+                val p = t.power
+                if (p != null && p !== last) {
+                    last = p
+                    p.voltageMv?.let { mv -> _battHistory.value = (_battHistory.value + mv).takeLast(HISTORY_MAX) }
+                }
+            }
+        }
         snapshotJob = viewModelScope.launch {
             // Keep the "last seen" cache fresh while connected.
             while (true) {
@@ -105,6 +122,7 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
 
     fun disconnect() {
         snapshotJob?.cancel()
+        historyJob?.cancel()
         _connection.value?.let { link ->
             val tel = link.telemetry.value
             if (tel.lastUpdateMs > 0) lastSeenStore.save(link.device.address, tel)
@@ -183,5 +201,6 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object {
         const val NO_TURTLE_AFTER_MS = 12_000L
+        const val HISTORY_MAX = 120
     }
 }
