@@ -107,23 +107,7 @@ fun BatteryGraphScreen(name: String?, samples: List<BattSample>, live: Boolean, 
 
             val t0 = pts.first().tMs
             val t1 = pts.last().tMs
-            val touch = Modifier.pointerInput(pts.size) {
-                fun pick(x: Float) {
-                    val plotW = size.width - AXIS_W
-                    val f = ((x - AXIS_W) / plotW).coerceIn(0f, 1f)
-                    val target = t0 + (f * (t1 - t0)).toLong()
-                    sel = pts.indices.minBy { abs(pts[it].tMs - target) }
-                }
-                detectTapGestures { pick(it.x) }
-            }.pointerInput(pts.size + 1) {
-                fun pick(x: Float) {
-                    val plotW = size.width - AXIS_W
-                    val f = ((x - AXIS_W) / plotW).coerceIn(0f, 1f)
-                    val target = t0 + (f * (t1 - t0)).toLong()
-                    sel = pts.indices.minBy { abs(pts[it].tMs - target) }
-                }
-                detectDragGestures(onDragStart = { pick(it.x) }) { change, _ -> pick(change.position.x) }
-            }
+            val touch = Modifier.chartScrub(pts.map { it.tMs }) { sel = it }
 
             WCard {
                 CardLabel("Battery voltage (V)")
@@ -178,82 +162,4 @@ private fun Summary(samples: List<BattSample>, live: Boolean) {
         }
         if (!live) Muted("Not live — showing what was recorded while connected.")
     }
-}
-
-private const val AXIS_W = 110f   // px reserved left of the plot for y labels
-private const val AXIS_H = 34f    // px reserved below the plot for time labels
-
-/**
- * One single-series line chart: 2 px line, recessive grid, y labels left,
- * time labels below, optional zero baseline, crosshair at [selT].
- */
-@Composable
-private fun LineChart(
-    data: List<Pair<Long, Double?>>, t0: Long, t1: Long, selT: Long?,
-    yLabel: (Double) -> String, zeroLine: Boolean, modifier: Modifier,
-) {
-    val measurer = rememberTextMeasurer()
-    val labelStyle = TextStyle(color = Wrangler.TextMuted, fontSize = 11.sp)
-    val fmt = remember { SimpleDateFormat("HH:mm", Locale.getDefault()) }
-    val vals = data.mapNotNull { it.second }
-    if (vals.isEmpty()) {
-        Muted("No readings")
-        return
-    }
-    var lo = vals.min(); var hi = vals.max()
-    if (zeroLine) { lo = minOf(lo, 0.0); hi = maxOf(hi, 0.0) }
-    if (hi - lo < 1e-6) { hi += 1.0; lo -= 1.0 }
-    val pad = (hi - lo) * 0.08
-    lo -= pad; hi += pad
-    val span = (t1 - t0).coerceAtLeast(1L)
-
-    Canvas(modifier.fillMaxWidth().height(170.dp).padding(top = 8.dp)) {
-        val plotW = size.width - AXIS_W
-        val plotH = size.height - AXIS_H
-        fun x(t: Long) = AXIS_W + (t - t0).toFloat() / span * plotW
-        fun y(v: Double) = ((hi - v) / (hi - lo) * plotH).toFloat()
-
-        // Recessive grid + y labels (3 lines)
-        for (k in 0..2) {
-            val v = lo + (hi - lo) * k / 2
-            val yy = y(v)
-            drawLine(Wrangler.CardBorder, Offset(AXIS_W, yy), Offset(size.width, yy), 1f)
-            label(measurer, yLabel(v), labelStyle, Offset(0f, yy - 16f))
-        }
-        if (zeroLine && lo < 0 && hi > 0) {
-            drawLine(Wrangler.TextMuted, Offset(AXIS_W, y(0.0)), Offset(size.width, y(0.0)), 2f,
-                pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f)))
-        }
-        // Time labels: start, middle, end
-        listOf(t0, t0 + span / 2, t1).forEachIndexed { k, t ->
-            val txt = fmt.format(Date(t))
-            val w = measurer.measure(txt, labelStyle).size.width
-            val xx = when (k) { 0 -> AXIS_W; 2 -> size.width - w; else -> x(t) - w / 2 }
-            label(measurer, txt, labelStyle, Offset(xx, plotH + 8f))
-        }
-        // The series: 2 px line; breaks over missing readings.
-        val path = Path()
-        var pen = false
-        data.forEach { (t, v) ->
-            if (v == null) { pen = false; return@forEach }
-            if (!pen) path.moveTo(x(t), y(v)) else path.lineTo(x(t), y(v))
-            pen = true
-        }
-        drawPath(path, Wrangler.Primary, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round))
-        // Crosshair
-        selT?.let { st ->
-            val xx = x(st)
-            drawLine(Wrangler.Dark, Offset(xx, 0f), Offset(xx, plotH), 2f)
-            data.firstOrNull { it.first == st }?.second?.let { v ->
-                drawCircle(Wrangler.Surface, 7f, Offset(xx, y(v)))
-                drawCircle(Wrangler.Primary, 5f, Offset(xx, y(v)))
-            }
-        }
-    }
-}
-
-private fun DrawScope.label(
-    m: androidx.compose.ui.text.TextMeasurer, text: String, style: TextStyle, at: Offset,
-) {
-    drawText(m.measure(text, style), topLeft = at)
 }

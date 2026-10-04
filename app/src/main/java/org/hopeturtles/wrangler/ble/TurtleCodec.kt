@@ -96,6 +96,15 @@ data class Status(
     val wifiCredentialsSet get() = bit(17)
 }
 
+/** Conditions inside the control bottle (0118). */
+data class Environment(
+    val airTempC: Double?,     // AHT21 — the headline "bottle temperature"
+    val humidityPct: Double?,  // AHT21 relative humidity
+    val baroTempC: Double?,    // BMP180
+    val boardTempC: Double?,   // DS3231 die temperature
+    val pressureHpa: Double?,  // BMP180
+)
+
 /** Times are unix seconds; null = never / none / clock not set. */
 data class Shore(val lastShoreSync: Long?, val journeyId: Long?, val deviceNow: Long?)
 
@@ -186,6 +195,12 @@ object TurtleCodec {
             queueCount = u16OrNull(x.u16()),
             stampsSession = u16OrNull(x.u16()),
         )
+    }
+
+    fun environment(b: ByteArray): Environment? {
+        if (b.size < 10) return null
+        val x = le(b)
+        return Environment(x10i(x.i16()), x10u(x.u16()), x10i(x.i16()), x10i(x.i16()), x10u(x.u16()))
     }
 
     fun shore(b: ByteArray): Shore? {

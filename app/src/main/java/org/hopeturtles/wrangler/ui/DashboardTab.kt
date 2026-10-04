@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.hopeturtles.wrangler.BattSample
+import org.hopeturtles.wrangler.EnvSample
 import org.hopeturtles.wrangler.ble.NavState
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
 import org.hopeturtles.wrangler.ui.theme.Wrangler
@@ -47,6 +48,8 @@ fun DashboardTab(
     live: Boolean,
     battHistory: List<BattSample>,
     onBattery: () -> Unit,
+    envHistory: List<EnvSample>,
+    onBottle: () -> Unit,
 ) {
     val nav = tel.nav
     val safe = nav?.state == NavState.SAFE
@@ -82,6 +85,22 @@ fun DashboardTab(
                     Muted(tel.sail?.windDeg?.let { "wind ${Format.degrees(it)}" +
                         (tel.sail?.confidencePct?.let { c -> " · $c% sure" } ?: "") } ?: "no wind yet")
                 }
+            }
+            // Control-bottle conditions — tap for the full-screen graphs.
+            WCard(Modifier.clickable(onClick = onBottle)) {
+                val env = tel.environment
+                Muted("Bottle")
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(Format.celsius(env?.airTempC) ?: "—", fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold, color = Wrangler.Dark)
+                    Spacer(Modifier.size(12.dp))
+                    Muted(listOfNotNull(env?.humidityPct?.let { "%.0f%% RH".format(it) },
+                        env?.pressureHpa?.let { "%.0f hPa".format(it) }).joinToString(" · ")
+                        .ifEmpty { if (env == null) "not reported by this firmware" else "—" })
+                }
+                val temps = envHistory.mapNotNull { it.airTempC?.let { t -> (t * 10).toInt() } }
+                if (temps.size >= 2) Sparkline(temps)
+                Muted("Tap for graph ›")
             }
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 Tile("GPS", Format.fixSummary(tel.position), Modifier.weight(1f).alpha(

@@ -50,6 +50,7 @@ data class TurtleTelemetry(
     val imu: Imu? = null,
     val status: Status? = null,
     val shore: Shore? = null,
+    val environment: Environment? = null,
     val lastUpdateMs: Long = 0,
 )
 
@@ -247,6 +248,7 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
                 TurtleUuids.IMU -> t.copy(imu = TurtleCodec.imu(b) ?: t.imu)
                 TurtleUuids.STATUS -> t.copy(status = TurtleCodec.status(b) ?: t.status)
                 TurtleUuids.SHORE -> t.copy(shore = TurtleCodec.shore(b) ?: t.shore)
+                TurtleUuids.ENVIRONMENT -> t.copy(environment = TurtleCodec.environment(b) ?: t.environment)
                 else -> t
             }.copy(lastUpdateMs = now)
         }

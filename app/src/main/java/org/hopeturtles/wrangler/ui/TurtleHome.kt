@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import org.hopeturtles.wrangler.BattSample
+import org.hopeturtles.wrangler.EnvSample
 import org.hopeturtles.wrangler.Notice
 import org.hopeturtles.wrangler.ble.LinkState
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
@@ -42,6 +43,8 @@ fun TurtleHome(
     live: Boolean,
     battHistory: List<BattSample>,
     onBattery: () -> Unit,
+    envHistory: List<EnvSample>,
+    onBottle: () -> Unit,
     tab: Tab,
     onTab: (Tab) -> Unit,
     bondState: Int,
@@ -88,7 +91,7 @@ fun TurtleHome(
                 }
             }
             when (tab) {
-                Tab.DASHBOARD -> DashboardTab(tel, live, battHistory, onBattery)
+                Tab.DASHBOARD -> DashboardTab(tel, live, battHistory, onBattery, envHistory, onBottle)
                 Tab.NAVIGATE -> ComingSoon("Navigate", "App Phase 3: destination on a map, journey start/end, " +
                     "cross-track gauge.")
                 Tab.GPS -> ComingSoon("GPS", "App Phase 4: switch to manual logging and stamp the turtle's " +

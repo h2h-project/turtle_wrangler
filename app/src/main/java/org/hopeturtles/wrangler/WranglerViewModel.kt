@@ -34,6 +34,12 @@ import java.nio.ByteOrder
 /** One battery reading; [ma] is the raw INA219 sign — negative = charging (contract v1). */
 data class BattSample(val tMs: Long, val mv: Int?, val ma: Int?, val soc: Int?)
 
+/** One control-bottle reading (Environment 0118). */
+data class EnvSample(
+    val tMs: Long, val airTempC: Double?, val humidityPct: Double?,
+    val baroTempC: Double?, val boardTempC: Double?, val pressureHpa: Double?,
+)
+
 /** One message line under the controls: what the last action did. */
 data class Notice(val text: String, val ok: Boolean)
 
@@ -69,6 +75,10 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
     private val _battHistory = MutableStateFlow<List<BattSample>>(emptyList())
     val battHistory: StateFlow<List<BattSample>> = _battHistory.asStateFlow()
 
+    /** Control-bottle readings for this connection (Bottle tile + graph). */
+    private val _envHistory = MutableStateFlow<List<EnvSample>>(emptyList())
+    val envHistory: StateFlow<List<EnvSample>> = _envHistory.asStateFlow()
+
     // ------------------------------------------------------------ scanning
 
     fun startScan() {
@@ -101,9 +111,18 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
         _notice.value = null
         link.connect()
         _battHistory.value = emptyList()
+        _envHistory.value = emptyList()
         historyJob = viewModelScope.launch {
             var last: Any? = null
+            var lastEnv: Any? = null
             link.telemetry.collect { t ->
+                val e = t.environment
+                if (e != null && e !== lastEnv) {
+                    lastEnv = e
+                    val sample = EnvSample(System.currentTimeMillis(), e.airTempC, e.humidityPct,
+                        e.baroTempC, e.boardTempC, e.pressureHpa)
+                    _envHistory.value = (_envHistory.value + sample).takeLast(HISTORY_MAX)
+                }
                 val p = t.power
                 if (p != null && p !== last) {
                     last = p

@@ -54,6 +54,8 @@ object Format {
         }
     }
 
+    fun celsius(c: Double?): String? = c?.let { "%.1f °C".format(it) }
+
     fun volts(mv: Int?): String? = mv?.let { "%.2f V".format(it / 1000.0) }
 
     /** Below this magnitude the pack is neither charging nor discharging. */

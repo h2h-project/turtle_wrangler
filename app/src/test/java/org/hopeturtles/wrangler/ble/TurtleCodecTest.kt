@@ -92,6 +92,16 @@ class TurtleCodecTest {
         assertEquals("Applemore", TurtleCodec.turtleName("Applemore".toByteArray()))
     }
 
+    @Test fun environment() {
+        // Packed by the firmware's TurtleData.environment() (turtleOS fcbc5ac).
+        val e = TurtleCodec.environment(hex("f5-00-64-02-ef-00-da-00-4f-27"))!!
+        near(24.5, e.airTempC); near(61.2, e.humidityPct); near(23.9, e.baroTempC)
+        near(21.8, e.boardTempC); near(1006.3, e.pressureHpa)
+        val none = TurtleCodec.environment(hex("ff7f-ffff-ff7f-ff7f-ffff"))!!
+        assertNull(none.airTempC); assertNull(none.humidityPct); assertNull(none.pressureHpa)
+        assertNull(TurtleCodec.environment(ByteArray(9)))
+    }
+
     @Test fun shorter_than_contract_is_rejected() {
         assertNull(TurtleCodec.position(ByteArray(11)))
         assertNull(TurtleCodec.nav(ByteArray(12)))

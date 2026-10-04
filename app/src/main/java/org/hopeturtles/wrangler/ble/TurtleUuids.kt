@@ -28,9 +28,12 @@ object TurtleUuids {
     val IMU: UUID = of(0x0115)
     val STATUS: UUID = of(0x0116)
     val SHORE: UUID = of(0x0117)
+    /** Added within v1 (2026-10-04): optional — older firmware lacks it. */
+    val ENVIRONMENT: UUID = of(0x0118)
 
-    /** The eight read + notify characteristics, in contract order. */
-    val TELEMETRY = listOf(POSITION, NAV, TARGETS, SAIL, POWER, IMU, STATUS, SHORE)
+    /** The read + notify characteristics, in contract order. Missing ones
+     *  (e.g. ENVIRONMENT on older firmware) are skipped by the connection. */
+    val TELEMETRY = listOf(POSITION, NAV, TARGETS, SAIL, POWER, IMU, STATUS, SHORE, ENVIRONMENT)
 
     // Command service
     val COMMAND: UUID = of(0x0201)
