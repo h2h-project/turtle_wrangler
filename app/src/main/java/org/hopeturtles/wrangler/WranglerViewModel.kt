@@ -31,6 +31,9 @@ import org.hopeturtles.wrangler.data.LastSeenStore
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
+/** One battery reading; [ma] is the raw INA219 sign — negative = charging (contract v1). */
+data class BattSample(val tMs: Long, val mv: Int?, val ma: Int?, val soc: Int?)
+
 /** One message line under the controls: what the last action did. */
 data class Notice(val text: String, val ok: Boolean)
 
@@ -61,10 +64,10 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
     private var snapshotJob: Job? = null
     private var historyJob: Job? = null
 
-    /** Battery voltage (mV) samples for this connection — the Dashboard
-     *  sparkline. Voltage, not SoC: SoC moves in coarse 1 % steps. */
-    private val _battHistory = MutableStateFlow<List<Int>>(emptyList())
-    val battHistory: StateFlow<List<Int>> = _battHistory.asStateFlow()
+    /** Battery samples for this connection: the Dashboard sparkline and the
+     *  full-screen charging graph. One per Power notification (~5 s). */
+    private val _battHistory = MutableStateFlow<List<BattSample>>(emptyList())
+    val battHistory: StateFlow<List<BattSample>> = _battHistory.asStateFlow()
 
     // ------------------------------------------------------------ scanning
 
@@ -104,7 +107,10 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
                 val p = t.power
                 if (p != null && p !== last) {
                     last = p
-                    p.voltageMv?.let { mv -> _battHistory.value = (_battHistory.value + mv).takeLast(HISTORY_MAX) }
+                    if (p.voltageMv != null || p.currentMa != null) {
+                        val sample = BattSample(System.currentTimeMillis(), p.voltageMv, p.currentMa, p.socPct)
+                        _battHistory.value = (_battHistory.value + sample).takeLast(HISTORY_MAX)
+                    }
                 }
             }
         }
@@ -201,6 +207,6 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
 
     companion object {
         const val NO_TURTLE_AFTER_MS = 12_000L
-        const val HISTORY_MAX = 120
+        const val HISTORY_MAX = 2_880          // 4 h at the Power characteristic's 5 s rate
     }
 }

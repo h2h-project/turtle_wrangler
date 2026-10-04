@@ -35,8 +35,17 @@ class FormatTest {
 
     @Test fun power() {
         assertEquals("3.60 V", Format.volts(3600))
-        assertEquals("+120 mA charging", Format.current(120))
-        assertEquals("-85 mA", Format.current(-85))
+        assertEquals("120 mA", Format.current(120))
+        assertEquals("85 mA", Format.current(-85))
+    }
+
+    @Test fun charge_state_negative_is_charging() {
+        assertEquals(Format.Charge.CHARGING, Format.charge(-120))
+        assertEquals(Format.Charge.DISCHARGING, Format.charge(85))
+        assertEquals(Format.Charge.IDLE, Format.charge(3))
+        assertEquals(Format.Charge.IDLE, Format.charge(-5))
+        assertEquals("Charging", Format.chargeWord(Format.charge(-400)))
+        assertNull(Format.charge(null))
     }
 
     @Test fun position_and_staleness() {

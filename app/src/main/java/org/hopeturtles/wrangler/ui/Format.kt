@@ -56,8 +56,29 @@ object Format {
 
     fun volts(mv: Int?): String? = mv?.let { "%.2f V".format(it / 1000.0) }
 
-    /** "+120 mA charging" / "-85 mA" (positive = charging, per the contract). */
-    fun current(ma: Int?): String? = ma?.let { if (it > 0) "+$it mA charging" else "$it mA" }
+    /** Below this magnitude the pack is neither charging nor discharging. */
+    const val IDLE_MA = 5
+
+    enum class Charge { CHARGING, DISCHARGING, IDLE }
+
+    /** Contract v1: current_mA is the raw INA219 sign — negative = charging. */
+    fun charge(ma: Int?): Charge? = ma?.let {
+        when {
+            it < -IDLE_MA -> Charge.CHARGING
+            it > IDLE_MA -> Charge.DISCHARGING
+            else -> Charge.IDLE
+        }
+    }
+
+    fun chargeWord(c: Charge?): String? = when (c) {
+        Charge.CHARGING -> "Charging"
+        Charge.DISCHARGING -> "Discharging"
+        Charge.IDLE -> "Idle"
+        null -> null
+    }
+
+    /** Magnitude only — the Charging / Discharging word carries the direction. */
+    fun current(ma: Int?): String? = ma?.let { "${kotlin.math.abs(it)} mA" }
 
     fun latLon(lat: Double?, lon: Double?): String? {
         if (lat == null || lon == null) return null

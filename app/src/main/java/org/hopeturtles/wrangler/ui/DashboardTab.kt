@@ -2,6 +2,7 @@ package org.hopeturtles.wrangler.ui
 
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -25,6 +26,7 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.hopeturtles.wrangler.BattSample
 import org.hopeturtles.wrangler.ble.NavState
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
 import org.hopeturtles.wrangler.ui.theme.Wrangler
@@ -40,7 +42,12 @@ import kotlin.math.sin
  * must never look the same (app plan Phase 2).
  */
 @Composable
-fun DashboardTab(tel: TurtleTelemetry, live: Boolean, battHistory: List<Int>) {
+fun DashboardTab(
+    tel: TurtleTelemetry,
+    live: Boolean,
+    battHistory: List<BattSample>,
+    onBattery: () -> Unit,
+) {
     val nav = tel.nav
     val safe = nav?.state == NavState.SAFE
     Column(
@@ -61,10 +68,15 @@ fun DashboardTab(tel: TurtleTelemetry, live: Boolean, battHistory: List<Int>) {
         Column(Modifier.alpha(if (live) 1f else 0.5f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             HeadingCard(tel, live && !safe)
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Tile("Battery", tel.power?.socPct?.let { "$it%" }, Modifier.weight(1f)) {
+                // Tap → full-screen charging graph.
+                Tile("Battery", tel.power?.socPct?.let { "$it%" },
+                    Modifier.weight(1f).clickable(onClick = onBattery)) {
+                    ChargeLine(tel.power?.currentMa)
                     Muted(listOfNotNull(Format.volts(tel.power?.voltageMv), Format.current(tel.power?.currentMa))
                         .joinToString(" · ").ifEmpty { "—" })
-                    if (battHistory.size >= 2) Sparkline(battHistory)
+                    val mv = battHistory.mapNotNull { it.mv }
+                    if (mv.size >= 2) Sparkline(mv)
+                    Muted("Tap for graph ›")
                 }
                 Tile("Sail angle", Format.degrees(tel.sail?.sailDeg), Modifier.weight(1f)) {
                     Muted(tel.sail?.windDeg?.let { "wind ${Format.degrees(it)}" +

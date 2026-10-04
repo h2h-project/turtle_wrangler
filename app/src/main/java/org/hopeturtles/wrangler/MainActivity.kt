@@ -28,6 +28,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import org.hopeturtles.wrangler.ui.CardLabel
 import org.hopeturtles.wrangler.ui.GreenOutlineButton
+import org.hopeturtles.wrangler.ui.BatteryGraphScreen
 import org.hopeturtles.wrangler.ui.Format
 import org.hopeturtles.wrangler.ui.Tab
 import org.hopeturtles.wrangler.ui.TurtleHome
@@ -125,8 +126,14 @@ private fun Main(vm: WranglerViewModel) {
         }
         val live = state is LinkState.Ready && tel.lastUpdateMs > 0 &&
             now - tel.lastUpdateMs < Format.LIVE_STALE_MS
+        var showBattery by rememberSaveable { mutableStateOf(false) }
+        if (showBattery) {
+            BatteryGraphScreen(tel.name, batt, live, onBack = { showBattery = false })
+            return
+        }
         TurtleHome(
             state = state, tel = tel, live = live, battHistory = batt,
+            onBattery = { showBattery = true },
             tab = tab, onTab = { tab = it },
             bondState = bond, notice = notice,
             onPair = vm::pair,

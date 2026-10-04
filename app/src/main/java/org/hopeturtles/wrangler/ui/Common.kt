@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -101,5 +102,32 @@ fun GreenOutlineButton(text: String, onClick: () -> Unit, enabled: Boolean = tru
         border = BorderStroke(1.dp, Wrangler.Light),
     ) {
         Text(text, color = Wrangler.Dark, fontWeight = FontWeight.Bold)
+    }
+}
+
+/** Solid lightning bolt — charging (same meaning as the OLED's bolt). */
+@Composable
+fun Bolt(size: androidx.compose.ui.unit.Dp = 14.dp, color: androidx.compose.ui.graphics.Color = Wrangler.Primary) {
+    androidx.compose.foundation.Canvas(Modifier.width(size).height(size)) {
+        val w = this.size.width; val h = this.size.height
+        val p = androidx.compose.ui.graphics.Path().apply {
+            moveTo(w * 0.62f, 0f); lineTo(w * 0.12f, h * 0.58f); lineTo(w * 0.46f, h * 0.58f)
+            lineTo(w * 0.36f, h); lineTo(w * 0.88f, h * 0.40f); lineTo(w * 0.54f, h * 0.40f); close()
+        }
+        drawPath(p, color)
+    }
+}
+
+/** "⚡ Charging" / "Discharging" / "Idle" from the INA219 current. */
+@Composable
+fun ChargeLine(ma: Int?) {
+    val c = Format.charge(ma) ?: return
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        if (c == Format.Charge.CHARGING) {
+            Bolt()
+            Spacer(Modifier.width(4.dp))
+        }
+        Text(Format.chargeWord(c)!!, fontWeight = FontWeight.Bold, fontSize = 13.sp,
+            color = if (c == Format.Charge.CHARGING) Wrangler.Primary else Wrangler.TextMuted)
     }
 }
