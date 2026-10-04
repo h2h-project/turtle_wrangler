@@ -188,11 +188,31 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
         if (!linkUp) return
 
         _state.value = LinkState.Preparing("Discovering services")
-        val ok = queue.run<Boolean> { done -> pendingDiscover = done; g.discoverServices() } ?: false
+        var ok = queue.run<Boolean> { done -> pendingDiscover = done; g.discoverServices() } ?: false
         if (!linkUp) return
         if (!ok || g.getService(TurtleUuids.TURTLE_SERVICE) == null) {
             fail("Not a turtle (Turtle service missing)")
             return
+        }
+
+        // Android caches a bonded device's GATT table and keeps using it
+        // until the device signals Service Changed — so after a firmware
+        // update adds a characteristic (e.g. 0118 Environment), a paired
+        // phone wouldn't see it. If anything we know is missing, drop the
+        // cache (hidden BluetoothGatt.refresh(), via reflection) and
+        // discover once more. Harmless when the turtle really lacks it.
+        val svc = g.getService(TurtleUuids.TURTLE_SERVICE)
+        if (TurtleUuids.TELEMETRY.any { svc.getCharacteristic(it) == null } && refreshGattCache(g)) {
+            _state.value = LinkState.Preparing("Refreshing services")
+            kotlinx.coroutines.delay(300)
+            ok = queue.run<Boolean> { done -> pendingDiscover = done; g.discoverServices() } ?: false
+            if (!linkUp) return
+            if (!ok || g.getService(TurtleUuids.TURTLE_SERVICE) == null) {
+                fail("Not a turtle (Turtle service missing)")
+                return
+            }
+            Log.i(TAG, "GATT cache refreshed; telemetry characteristics now: " +
+                TurtleUuids.TELEMETRY.count { g.getService(TurtleUuids.TURTLE_SERVICE).getCharacteristic(it) != null })
         }
 
         _state.value = LinkState.Preparing("Checking contract")
@@ -221,6 +241,16 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
         setupRetries = 0
         _state.value = LinkState.Ready(readOnly)
         Log.i(TAG, "ready: ${name} contract v${info.contractVersion} mtu=$mtu readOnly=$readOnly")
+    }
+
+    /** Hidden BluetoothGatt.refresh(): clears Android's cached GATT table for
+     *  this device. Returns true if the call succeeded. */
+    private fun refreshGattCache(g: BluetoothGatt): Boolean = try {
+        val m = g.javaClass.getMethod("refresh")
+        (m.invoke(g) as? Boolean ?: false).also { Log.i(TAG, "GATT cache refresh -> $it") }
+    } catch (e: Exception) {
+        Log.w(TAG, "GATT cache refresh unavailable: $e")
+        false
     }
 
     private suspend fun readDeviceInfo() {
