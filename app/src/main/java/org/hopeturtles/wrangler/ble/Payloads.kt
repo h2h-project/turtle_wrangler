@@ -18,6 +18,9 @@ object Payloads {
         return le(8).putInt((lat * 1e7).roundToInt()).putInt((lon * 1e7).roundToInt()).array()
     }
 
+    /** SERVO_SET_ANGLE `<B>` 0..180 (clamped). */
+    fun servoAngle(deg: Int): ByteArray = byteArrayOf(deg.coerceIn(0, 180).toByte())
+
     /** TELEMETRY_SET_INTERVAL `<H>` seconds. */
     fun u16(v: Int): ByteArray = le(2).putShort(v.toShort()).array()
 

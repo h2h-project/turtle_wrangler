@@ -30,5 +30,8 @@ class PayloadsTest {
 
     @Test fun u16() {
         assertArrayEquals(hex("7800"), Payloads.u16(120))
+        assertArrayEquals(hex("b4"), Payloads.servoAngle(180))
+        assertArrayEquals(hex("00"), Payloads.servoAngle(-5))
+        assertArrayEquals(hex("b4"), Payloads.servoAngle(200))
     }
 }

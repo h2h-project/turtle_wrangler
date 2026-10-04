@@ -58,7 +58,15 @@ data class Targets(val set: LatLon?, val mission: LatLon?, val activeSource: Tar
 
 enum class SweepState { IDLE, NAV_SWEEP, BENCH_SWEEP, UNKNOWN }
 
-data class Sail(val sailDeg: Double?, val windDeg: Double?, val sweep: SweepState, val confidencePct: Int?)
+/**
+ * [servoPosDeg]: last commanded servo position, 0–180 of its full travel
+ * (autopilot or the dial); [manualHoldS]: seconds of hand control left.
+ * Both null on firmware before 2026-10-05 (6-byte Sail).
+ */
+data class Sail(
+    val sailDeg: Double?, val windDeg: Double?, val sweep: SweepState, val confidencePct: Int?,
+    val servoPosDeg: Double? = null, val manualHoldS: Int? = null,
+)
 
 data class Power(val voltageMv: Int?, val currentMa: Int?, val socPct: Int?)
 
@@ -163,8 +171,12 @@ object TurtleCodec {
     fun sail(b: ByteArray): Sail? {
         if (b.size < 6) return null
         val x = le(b)
-        return Sail(x10u(x.u16()), x10u(x.u16()),
-            SweepState.entries.getOrElse(x.u8()) { SweepState.UNKNOWN }, u8OrNull(x.u8()))
+        val sail = x10u(x.u16())
+        val wind = x10u(x.u16())
+        val sweep = SweepState.entries.getOrElse(x.u8()) { SweepState.UNKNOWN }
+        val conf = u8OrNull(x.u8())
+        if (b.size < 9) return Sail(sail, wind, sweep, conf)
+        return Sail(sail, wind, sweep, conf, x10u(x.u16()), u8OrNull(x.u8()))
     }
 
     fun power(b: ByteArray): Power? {

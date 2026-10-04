@@ -147,6 +147,8 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
     fun disconnect() {
         snapshotJob?.cancel()
         historyJob?.cancel()
+        servoJob?.cancel()
+        servoWanted = null
         _connection.value?.let { link ->
             val tel = link.telemetry.value
             if (tel.lastUpdateMs > 0) lastSeenStore.save(link.device.address, tel)
@@ -213,6 +215,38 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
             _notice.value = Notice("$label: ${r.message}", r.code.ok)
             if (r.code == ResultCode.NOT_BONDED) pair()
             onResult(r)
+        }
+    }
+
+    // ------------------------------------------------------------ servo dial
+
+    /** Latest angle the dial asked for and not yet sent (main thread only). */
+    private var servoWanted: Int? = null
+    private var servoJob: Job? = null
+
+    /**
+     * Servo dial: move the sail servo to [deg] (0–180 of its full travel).
+     * Latest wins — while one SERVO_SET_ANGLE is in flight, newer angles
+     * replace each other, so a fast drag never queues up a backlog and the
+     * turtle always ends where the finger stopped. Successes are silent; a
+     * failure stops the stream and says why.
+     */
+    fun servoTo(deg: Int) {
+        val c = client ?: return
+        servoWanted = deg
+        if (servoJob?.isActive == true) return
+        servoJob = viewModelScope.launch {
+            while (true) {
+                val d = servoWanted ?: break
+                servoWanted = null
+                val r = c.send(Op.SERVO_SET_ANGLE, Payloads.servoAngle(d))
+                if (!r.code.ok) {
+                    servoWanted = null
+                    _notice.value = Notice("Sail servo: ${r.message}", false)
+                    if (r.code == ResultCode.NOT_BONDED) pair()
+                    break
+                }
+            }
         }
     }
 

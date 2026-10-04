@@ -168,6 +168,7 @@ private fun Main(vm: WranglerViewModel) {
             tab = tab, onTab = { tab = it },
             bondState = bond, notice = notice, busy = busy, run = run, say = vm::say,
             onPickOnMap = { showMap = true },
+            onServo = vm::servoTo,
             onPair = vm::pair,
             onTest = { vm.testCommand(tel) },
             onDisconnect = vm::disconnect,

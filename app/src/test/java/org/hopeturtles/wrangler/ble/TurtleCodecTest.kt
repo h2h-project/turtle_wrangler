@@ -80,6 +80,15 @@ class TurtleCodecTest {
         val s = TurtleCodec.sail(hex("4001ffff00ff"))!!
         near(32.0, s.sailDeg); assertNull(s.windDeg); assertNull(s.confidencePct)
         assertEquals(SweepState.IDLE, s.sweep)
+        assertNull(s.servoPosDeg); assertNull(s.manualHoldS)      // 6-byte (pre-2026-10-05) firmware
+    }
+
+    @Test fun sail_with_servo_position() {
+        // struct.pack("<HHBBHB", 320, 0xFFFF, 0, 0xFF, 1800, 42)
+        val s = TurtleCodec.sail(hex("4001ffff00ff08072a"))!!
+        near(180.0, s.servoPosDeg); assertEquals(42, s.manualHoldS)
+        val never = TurtleCodec.sail(hex("4001ffff00ffffff00"))!!
+        assertNull(never.servoPosDeg); assertEquals(0, never.manualHoldS)
     }
 
     @Test fun power() {

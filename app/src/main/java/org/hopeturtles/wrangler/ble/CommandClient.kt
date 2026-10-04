@@ -19,6 +19,7 @@ object Op {
     const val DEST_CLEAR = 0x06
     const val NAV_LUFF_SWEEP = 0x10
     const val SERVO_BENCH_SWEEP = 0x11
+    const val SERVO_SET_ANGLE = 0x12          // added 2026-10-05: <B> 0..180 of full travel
     const val GPS_STAMP = 0x20
     const val GPS_SET_ENABLED = 0x21
     const val TELEMETRY_SET_MODE = 0x22

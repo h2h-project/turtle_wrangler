@@ -53,6 +53,7 @@ fun TurtleHome(
     run: RunCommand,
     say: (String, Boolean) -> Unit,
     onPickOnMap: () -> Unit,
+    onServo: (Int) -> Unit,
     onPair: () -> Unit,
     onTest: () -> Unit,
     onDisconnect: () -> Unit,
@@ -103,6 +104,7 @@ fun TurtleHome(
                 Tab.NAVIGATE -> NavigateTab(
                     tel, live, canCommand = state is LinkState.Ready && !state.readOnly,
                     busy = busy, notice = notice, run = run, say = say, onPickOnMap = onPickOnMap,
+                    onServo = onServo,
                 )
                 Tab.GPS -> ComingSoon("GPS", "App Phase 4: switch to manual logging and stamp the turtle's " +
                     "position with one big button.")

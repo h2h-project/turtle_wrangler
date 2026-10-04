@@ -58,6 +58,7 @@ fun NavigateTab(
     run: RunCommand,
     say: (String, Boolean) -> Unit,
     onPickOnMap: () -> Unit,
+    onServo: (Int) -> Unit,
 ) {
     var ask by remember { mutableStateOf<Ask?>(null) }
     val enabled = canCommand && busy == null
@@ -78,6 +79,7 @@ fun NavigateTab(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        ServoDial(tel.sail, tel.status?.servoPresent, canCommand, onServo)
         NoticeCard(notice, busy)
         if (!live) Muted("Not live — values are the last ones received.")
         CourseCard(tel)
