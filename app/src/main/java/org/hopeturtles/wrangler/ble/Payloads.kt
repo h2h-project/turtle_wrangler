@@ -27,6 +27,9 @@ object Payloads {
     /** TIME_SET OK → `<B>` rtc_chip_written (false = system clock only, lost at the next boot). */
     fun rtcChipWritten(p: ByteArray): Boolean? = if (p.isEmpty()) null else p[0].toInt() != 0
 
+    /** TIMEZONE_SET `<h>` minutes from UTC (−720..840). */
+    fun tzOffset(min: Int): ByteArray = le(2).putShort(min.toShort()).array()
+
     /** SECURE_MODE_SET WRONG_STATE → `<B>` 1: turning on refused, RTC battery fault. */
     fun secureRefusedForBattery(p: ByteArray): Boolean = p.isNotEmpty() && p[0].toInt() == 1
 

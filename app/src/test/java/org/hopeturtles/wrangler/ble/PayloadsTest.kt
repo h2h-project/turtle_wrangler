@@ -50,6 +50,11 @@ class PayloadsTest {
         assertNull(Payloads.rtcChipWritten(ByteArray(0)))
     }
 
+    @Test fun tz_offset() {
+        assertArrayEquals(hex("3c00"), Payloads.tzOffset(60))      // struct.pack("<h", 60)
+        assertArrayEquals(hex("b6fe"), Payloads.tzOffset(-330))
+    }
+
     @Test fun secure_mode_refused() {
         assertTrue(Payloads.secureRefusedForBattery(hex("01")))
         assertFalse(Payloads.secureRefusedForBattery(hex("FF")))

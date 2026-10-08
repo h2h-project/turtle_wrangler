@@ -65,6 +65,17 @@ class TurtleCodecTest {
         assertEquals(946684800L, s.deviceClock)
         assertEquals(ClockSource.GPS, s.clockSource)
         assertEquals(ClockSource.UNKNOWN, TurtleCodec.shore(hex("00000000000000000000000080436d3809"))!!.clockSource)
+        assertNull(s.tzOffsetMin)            // 17-byte Shore: before the time zone field
+    }
+
+    @Test fun shore_time_zone() {
+        // struct.pack("<IIIIBh", 0, 0, 1791479880, 1791479880, 4, 60): set by a phone at UTC+1
+        val s = TurtleCodec.shore(hex("000000000000000048d0c76a48d0c76a043c00"))!!
+        assertEquals(ClockSource.PHONE, s.clockSource)
+        assertEquals(60, s.tzOffsetMin)
+        // UTC-5:30 and the 0x7FFF "not configured" sentinel
+        assertEquals(-330, TurtleCodec.shore(hex("000000000000000048d0c76a48d0c76a04b6fe"))!!.tzOffsetMin)
+        assertNull(TurtleCodec.shore(hex("000000000000000048d0c76a48d0c76a04ff7f"))!!.tzOffsetMin)
     }
 
     @Test fun status_clock_and_secure_bits() {

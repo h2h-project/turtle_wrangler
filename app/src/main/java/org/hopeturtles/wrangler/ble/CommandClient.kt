@@ -34,6 +34,7 @@ object Op {
     const val REBOOT = 0x42
     const val COMPASS_SET_OFFSET = 0x43
     const val TIME_SET = 0x44                 // added 2026-10-08: <I> unix seconds (phone clock)
+    const val TIMEZONE_SET = 0x46             // added 2026-10-08: <h> minutes from UTC
     const val SECURE_MODE_SET = 0x45          // added 2026-10-08: <B> 0/1; WRONG_STATE 1 = RTC battery fault
 }
 

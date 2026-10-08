@@ -14,4 +14,12 @@ class ClockTest {
         // a turtle whose RTC restarted at 2000-01-01, seen on 8 Oct 2026
         assertEquals("26 years behind", difference(946_690_000L - 1_791_475_200L))
     }
+
+    @Test fun tz_labels_like_the_oled() {
+        assertEquals("UTC", tzLabel(0))
+        assertEquals("UTC+3", tzLabel(180))
+        assertEquals("UTC+1", tzLabel(60))
+        assertEquals("UTC−5:30", tzLabel(-330))
+        assertEquals("UTC+5:45", tzLabel(345))
+    }
 }

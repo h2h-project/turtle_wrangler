@@ -124,11 +124,15 @@ data class Environment(
  * (12-byte Shore) or when it can't be read.
  * [clockSource]: what set the clock this boot; null before turtleOS 2.5.1
  * (16-byte Shore).
+ * [tzOffsetMin]: the turtle's time zone, minutes from UTC (config
+ * `timezone_offset_min`, which the OLED adds to its UTC clock); null when
+ * not configured or on a 17-byte Shore.
  */
 data class Shore(
     val lastShoreSync: Long?, val journeyId: Long?, val deviceNow: Long?,
     val deviceClock: Long? = null,
     val clockSource: ClockSource? = null,
+    val tzOffsetMin: Int? = null,
 )
 
 /** Shore `clock_source`. */
@@ -246,6 +250,8 @@ object TurtleCodec {
         val s = Shore(t(x.u32()), t(x.u32()), t(x.u32()))
         if (b.size < 16) return s
         val withClock = s.copy(deviceClock = t(x.u32()))
-        return if (b.size < 17) withClock else withClock.copy(clockSource = ClockSource.of(x.u8()))
+        if (b.size < 17) return withClock
+        val withSource = withClock.copy(clockSource = ClockSource.of(x.u8()))
+        return if (b.size < 19) withSource else withSource.copy(tzOffsetMin = x.i16().takeIf { it != NA_I16 })
     }
 }

@@ -35,6 +35,8 @@ import org.hopeturtles.wrangler.data.LastSeen
 import org.hopeturtles.wrangler.data.LastSeenStore
 import org.hopeturtles.wrangler.data.StampEntry
 import org.hopeturtles.wrangler.data.StampLogStore
+import org.hopeturtles.wrangler.ui.tzLabel
+import java.util.TimeZone
 
 /** One battery reading; [ma] is the raw INA219 sign — negative = charging (contract v1). */
 data class BattSample(val tMs: Long, val mv: Int?, val ma: Int?, val soc: Int?)
@@ -326,26 +328,37 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
     // ------------------------------------------------------------ turtle clock
 
     /**
-     * TIME_SET from this phone's clock, for a turtle whose RTC lost its
-     * time (it refuses stamps and journeys until set). Re-reads Shore and
-     * Status afterwards so Diagnostics shows the new time straight away.
+     * Line the turtle up with this phone: TIME_SET (UTC), then
+     * TIMEZONE_SET with the phone's current UTC offset (contract: "Set
+     * turtle clock to phone time" means both). Re-reads Shore and Status
+     * afterwards so Diagnostics shows the new time and zone straight away.
      */
     fun setTurtleClock() {
         val link = _connection.value ?: return
-        val now = System.currentTimeMillis() / 1000
-        command("Set turtle clock", Op.TIME_SET, Payloads.unixTime(now)) { r ->
-            when {
-                r.code.ok && Payloads.rtcChipWritten(r.payload) == false -> say(
-                    "Turtle clock set to this phone's time, but its clock chip didn't take it: " +
-                        "the time will be lost when the turtle restarts.", true)
-                r.code.ok -> say("Turtle clock set to this phone's time.", true)
-                r.code == ResultCode.BAD_VALUE -> say(
-                    "The turtle refused this phone's time (it must be 2020–2099). Check the phone's clock.", false)
-                else -> say("Couldn't set the turtle clock: ${r.message}", false)
+        val nowMs = System.currentTimeMillis()
+        val tzMin = TimeZone.getDefault().getOffset(nowMs) / 60_000
+        command("Set turtle clock", Op.TIME_SET, Payloads.unixTime(nowMs / 1000)) { r ->
+            if (!r.code.ok) {
+                say(when (r.code) {
+                    ResultCode.BAD_VALUE ->
+                        "The turtle refused this phone's time (it must be 2020–2099). Check the phone's clock."
+                    else -> "Couldn't set the turtle clock: ${r.message}"
+                }, false)
+                return@command
             }
-            if (r.code.ok) viewModelScope.launch {
-                link.reread(TurtleUuids.SHORE)
-                link.reread(TurtleUuids.STATUS)
+            val chipLost = if (Payloads.rtcChipWritten(r.payload) == false)
+                " Its clock chip didn't take it, so the time will be lost when the turtle restarts." else ""
+            command("Set turtle time zone", Op.TIMEZONE_SET, Payloads.tzOffset(tzMin)) { z ->
+                when {
+                    z.code.ok -> say("Turtle clock and time zone (${tzLabel(tzMin)}) set to this phone's.$chipLost", true)
+                    z.code == ResultCode.UNKNOWN_OPCODE -> say("Turtle clock set to this phone's time, but this " +
+                        "turtle's firmware can't take a time zone. Update turtleOS.$chipLost", true)
+                    else -> say("Turtle clock set, but not its time zone: ${z.message}$chipLost", false)
+                }
+                viewModelScope.launch {
+                    link.reread(TurtleUuids.SHORE)
+                    link.reread(TurtleUuids.STATUS)
+                }
             }
         }
     }
