@@ -26,6 +26,7 @@ import org.hopeturtles.wrangler.EnvSample
 import org.hopeturtles.wrangler.Notice
 import org.hopeturtles.wrangler.ble.LinkState
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
+import org.hopeturtles.wrangler.data.StampEntry
 import org.hopeturtles.wrangler.ui.theme.Wrangler
 
 /** The four bottom tabs. Settings is not a tab — it's the gear, top-right. */
@@ -54,6 +55,10 @@ fun TurtleHome(
     say: (String, Boolean) -> Unit,
     onPickOnMap: () -> Unit,
     onServo: (Int) -> Unit,
+    stampLog: List<StampEntry>,
+    onStamp: () -> Unit,
+    onSetClock: () -> Unit,
+    onSecureMode: (Boolean) -> Unit,
     onPair: () -> Unit,
     onTest: () -> Unit,
     onDisconnect: () -> Unit,
@@ -106,20 +111,13 @@ fun TurtleHome(
                     busy = busy, notice = notice, run = run, say = say, onPickOnMap = onPickOnMap,
                     onServo = onServo,
                 )
-                Tab.GPS -> ComingSoon("GPS", "App Phase 4: switch to manual logging and stamp the turtle's " +
-                    "position with one big button.")
-                Tab.DIAGNOSTICS -> LinkPanel(state, tel, bondState, notice, onPair, onTest, onDisconnect)
+                Tab.GPS -> GpsTab(
+                    tel, live, canCommand = state is LinkState.Ready && !state.readOnly,
+                    busy = busy, notice = notice, log = stampLog, run = run, onStamp = onStamp,
+                    onSetClock = onSetClock,
+                )
+                Tab.DIAGNOSTICS -> LinkPanel(state, tel, bondState, notice, busy, onPair, onSetClock, onSecureMode, onTest, onDisconnect)
             }
-        }
-    }
-}
-
-@Composable
-private fun ComingSoon(title: String, body: String) {
-    Column(Modifier.padding(16.dp)) {
-        WCard {
-            CardLabel(title)
-            Muted(body)
         }
     }
 }

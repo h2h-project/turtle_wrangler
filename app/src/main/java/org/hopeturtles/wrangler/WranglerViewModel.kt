@@ -23,14 +23,18 @@ import org.hopeturtles.wrangler.ble.CommandClient
 import org.hopeturtles.wrangler.ble.CommandResult
 import org.hopeturtles.wrangler.ble.FoundTurtle
 import org.hopeturtles.wrangler.ble.LinkState
+import org.hopeturtles.wrangler.ble.NotStamped
 import org.hopeturtles.wrangler.ble.Op
 import org.hopeturtles.wrangler.ble.Payloads
 import org.hopeturtles.wrangler.ble.ResultCode
 import org.hopeturtles.wrangler.ble.TurtleConnection
 import org.hopeturtles.wrangler.ble.TurtleScanner
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
+import org.hopeturtles.wrangler.ble.TurtleUuids
 import org.hopeturtles.wrangler.data.LastSeen
 import org.hopeturtles.wrangler.data.LastSeenStore
+import org.hopeturtles.wrangler.data.StampEntry
+import org.hopeturtles.wrangler.data.StampLogStore
 
 /** One battery reading; [ma] is the raw INA219 sign — negative = charging (contract v1). */
 data class BattSample(val tMs: Long, val mv: Int?, val ma: Int?, val soc: Int?)
@@ -49,6 +53,7 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
 
     val scanner = TurtleScanner(app)
     private val lastSeenStore = LastSeenStore(app)
+    private val stampStore = StampLogStore(app)
 
     private val _connection = MutableStateFlow<TurtleConnection?>(null)
     val connection: StateFlow<TurtleConnection?> = _connection.asStateFlow()
@@ -79,6 +84,13 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
     /** Control-bottle readings for this connection (Bottle tile + graph). */
     private val _envHistory = MutableStateFlow<List<EnvSample>>(emptyList())
     val envHistory: StateFlow<List<EnvSample>> = _envHistory.asStateFlow()
+
+    /** The connected turtle's manual-stamp log (GPS tab), oldest first. */
+    private val _stampLog = MutableStateFlow<List<StampEntry>>(emptyList())
+    val stampLog: StateFlow<List<StampEntry>> = _stampLog.asStateFlow()
+
+    /** Turtle clock minus phone clock (ms), from the last `device_now`. */
+    private var clockOffsetMs: Long? = null
 
     // ------------------------------------------------------------ scanning
 
@@ -117,10 +129,20 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
         link.connect()
         _battHistory.value = emptyList()
         _envHistory.value = emptyList()
+        _stampLog.value = stampStore.load(t.address)
+        clockOffsetMs = null
         historyJob = viewModelScope.launch {
             var last: Any? = null
             var lastEnv: Any? = null
+            var lastShore: Any? = null
             link.telemetry.collect { t ->
+                val sh = t.shore
+                if (sh != null && sh !== lastShore) {
+                    lastShore = sh
+                    sh.deviceNow?.let { clockOffsetMs = it * 1000 - System.currentTimeMillis() }
+                    stampStore.markSent(link.device.address, sh.lastShoreSync, t.status?.queueCount)
+                        ?.let { _stampLog.value = it }
+                }
                 val e = t.environment
                 if (e != null && e !== lastEnv) {
                     lastEnv = e
@@ -253,6 +275,99 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
                     break
                 }
             }
+        }
+    }
+
+    // ------------------------------------------------------------ GPS stamps
+
+    /**
+     * GPS tab's Stamp button: one GPS_STAMP, logged on the phone whatever
+     * the outcome, with the turtle's position from the latest telemetry.
+     */
+    fun stamp() {
+        val link = _connection.value ?: return
+        command("Stamp", Op.GPS_STAMP) { r ->
+            val tel = link.telemetry.value
+            val now = System.currentTimeMillis()
+            val ok = if (r.code.ok) Payloads.stampOk(r.payload) else null
+            val reason = when {
+                ok != null -> null
+                r.code.ok -> "the turtle's answer was unreadable"
+                r.code == ResultCode.NOT_STAMPED -> Payloads.notStampedReason(r.payload).why
+                r.code == ResultCode.WRONG_STATE -> "the turtle isn't in manual logging mode"
+                else -> r.message.trimEnd('.').replaceFirstChar { it.lowercase() }
+            }
+            val p = tel.position?.takeIf { it.hasFix && ok?.hasPosition == true }
+            val entry = StampEntry(
+                atMs = now,
+                turtleAt = clockOffsetMs?.let { (now + it) / 1000 },
+                journeyId = tel.shore?.journeyId,
+                ok = ok != null,
+                hasPosition = ok?.hasPosition == true,
+                stampsSession = ok?.stampsSession,
+                reason = reason,
+                lat = p?.lat, lon = p?.lon, sats = p?.sats,
+            )
+            _stampLog.value = stampStore.add(link.device.address, entry)
+            say(
+                when {
+                    ok == null && r.code == ResultCode.NOT_STAMPED &&
+                        Payloads.notStampedReason(r.payload) == NotStamped.CLOCK_NOT_SET ->
+                        "Not stamped — $reason. Set the turtle clock from this phone below."
+                    ok == null -> "Not stamped — $reason."
+                    !ok.hasPosition -> "Stamped — no position (sensor values and time only). #${ok.stampsSession} this boot."
+                    else -> "Stamped. #${ok.stampsSession} this boot."
+                },
+                ok != null,
+            )
+        }
+    }
+
+    // ------------------------------------------------------------ turtle clock
+
+    /**
+     * TIME_SET from this phone's clock, for a turtle whose RTC lost its
+     * time (it refuses stamps and journeys until set). Re-reads Shore and
+     * Status afterwards so Diagnostics shows the new time straight away.
+     */
+    fun setTurtleClock() {
+        val link = _connection.value ?: return
+        val now = System.currentTimeMillis() / 1000
+        command("Set turtle clock", Op.TIME_SET, Payloads.unixTime(now)) { r ->
+            when {
+                r.code.ok && Payloads.rtcChipWritten(r.payload) == false -> say(
+                    "Turtle clock set to this phone's time, but its clock chip didn't take it: " +
+                        "the time will be lost when the turtle restarts.", true)
+                r.code.ok -> say("Turtle clock set to this phone's time.", true)
+                r.code == ResultCode.BAD_VALUE -> say(
+                    "The turtle refused this phone's time (it must be 2020–2099). Check the phone's clock.", false)
+                else -> say("Couldn't set the turtle clock: ${r.message}", false)
+            }
+            if (r.code.ok) viewModelScope.launch {
+                link.reread(TurtleUuids.SHORE)
+                link.reread(TurtleUuids.STATUS)
+            }
+        }
+    }
+
+    /**
+     * SECURE_MODE_SET. The turtle refuses to turn it on while its RTC
+     * battery is faulty, since with secure mode the clock chip is its only
+     * time source at sea.
+     */
+    fun setSecureMode(on: Boolean) {
+        val link = _connection.value ?: return
+        command(if (on) "Turn secure mode on" else "Turn secure mode off",
+            Op.SECURE_MODE_SET, byteArrayOf(if (on) 1 else 0)) { r ->
+            when {
+                r.code.ok -> say(if (on) "Secure mode is on: the turtle no longer trusts GPS time."
+                    else "Secure mode is off.", true)
+                r.code == ResultCode.WRONG_STATE && Payloads.secureRefusedForBattery(r.payload) -> say(
+                    "Secure mode can't turn on: the turtle's clock-chip battery is faulty. " +
+                        "Replace the coin cell first.", false)
+                else -> say("Couldn't change secure mode: ${r.message}", false)
+            }
+            if (r.code.ok) viewModelScope.launch { link.reread(TurtleUuids.STATUS) }
         }
     }
 

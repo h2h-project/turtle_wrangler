@@ -48,6 +48,33 @@ class TurtleCodecTest {
         assertEquals(1790930638L, s.lastShoreSync)
         assertNull(s.journeyId)
         assertEquals(1790930648L, s.deviceNow)
+        assertNull(s.deviceClock)            // 12-byte Shore: firmware before device_clock
+    }
+
+    @Test fun shore_unsynced_clock() {
+        // struct.pack("<IIII", 0, 0, 0, 946690000): RTC lost power, clock reads 2000-01-01 01:26:40
+        val s = TurtleCodec.shore(hex("000000000000000000000000d0576d38"))!!
+        assertNull(s.deviceNow)
+        assertEquals(946690000L, s.deviceClock)
+        assertNull(s.clockSource)            // 16-byte Shore: before turtleOS 2.5.1
+    }
+
+    @Test fun shore_clock_source() {
+        // struct.pack("<IIIIB", 0, 0, 0, 946684800, 3): unsynced, set by GPS (2.5.1)
+        val s = TurtleCodec.shore(hex("00000000000000000000000080436d3803"))!!
+        assertEquals(946684800L, s.deviceClock)
+        assertEquals(ClockSource.GPS, s.clockSource)
+        assertEquals(ClockSource.UNKNOWN, TurtleCodec.shore(hex("00000000000000000000000080436d3809"))!!.clockSource)
+    }
+
+    @Test fun status_clock_and_secure_bits() {
+        // flags = rtc_synced | rtc_battery_fault | secure_mode_blocked
+        val blocked = TurtleCodec.status(hex("002014000201780000000000"))!!
+        assertTrue(blocked.rtcSynced); assertTrue(blocked.rtcBatteryFault)
+        assertTrue(blocked.secureModeBlocked); assertFalse(blocked.secureMode)
+        // flags = rtc_synced | secure_mode
+        val on = TurtleCodec.status(hex("002008000201780000000000"))!!
+        assertTrue(on.secureMode); assertFalse(on.rtcBatteryFault); assertFalse(on.secureModeBlocked)
     }
 
     @Test fun position() {

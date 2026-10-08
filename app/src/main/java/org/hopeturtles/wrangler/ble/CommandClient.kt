@@ -33,6 +33,8 @@ object Op {
     const val SET_TURTLE_MODE = 0x41
     const val REBOOT = 0x42
     const val COMPASS_SET_OFFSET = 0x43
+    const val TIME_SET = 0x44                 // added 2026-10-08: <I> unix seconds (phone clock)
+    const val SECURE_MODE_SET = 0x45          // added 2026-10-08: <B> 0/1; WRONG_STATE 1 = RTC battery fault
 }
 
 /** GATT contract v1 result codes, each with the one sentence the app shows. */

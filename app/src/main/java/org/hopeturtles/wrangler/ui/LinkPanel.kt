@@ -27,7 +27,10 @@ fun LinkPanel(
     tel: TurtleTelemetry,
     bondState: Int,
     notice: Notice?,
+    busy: String?,
     onPair: () -> Unit,
+    onSetClock: () -> Unit,
+    onSecureMode: (Boolean) -> Unit,
     onTest: () -> Unit,
     onDisconnect: () -> Unit,
 ) {
@@ -71,6 +74,10 @@ fun LinkPanel(
             Field("Firmware", tel.deviceInfo?.firmware)
             Field("Serial", tel.deviceInfo?.serial)
         }
+
+        val canCommand = state is LinkState.Ready && !state.readOnly && busy == null
+        ClockCard(tel, enabled = canCommand, onSetClock)
+        SecureModeCard(tel, enabled = canCommand, onSecureMode)
 
         WCard {
             CardLabel("Live")

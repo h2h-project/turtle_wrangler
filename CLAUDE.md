@@ -32,6 +32,7 @@ app/src/main/java/org/hopeturtles/wrangler/
 │   ├── CommandClient.kt   opcode/seq framing, IN_PROGRESS, timeouts, result messages
 │   └── Payloads.kt        command payload encoders + OK-result payload decoders
 ├── data/LastSeenStore.kt  per-turtle "last seen" cache (never shown as live)
+├── data/StampLogStore.kt  per-turtle GPS stamp log (GPS tab), Stamped → Sent
 └── ui/                    Compose screens + theme
 app/src/test/              JVM unit tests (decoders vs real Applemore bytes)
 ```

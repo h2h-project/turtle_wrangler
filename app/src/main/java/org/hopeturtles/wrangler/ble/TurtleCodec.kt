@@ -102,6 +102,10 @@ data class Status(
     val requireBond get() = bit(15)
     val commandInProgress get() = bit(16)
     val wifiCredentialsSet get() = bit(17)
+    // added 2026-10-08 (turtleOS 2.5.1); older firmware sends 0
+    val rtcBatteryFault get() = bit(18)
+    val secureMode get() = bit(19)
+    val secureModeBlocked get() = bit(20)
 }
 
 /** Conditions inside the control bottle (0118). */
@@ -113,8 +117,28 @@ data class Environment(
     val pressureHpa: Double?,  // BMP180
 )
 
-/** Times are unix seconds; null = never / none / clock not set. */
-data class Shore(val lastShoreSync: Long?, val journeyId: Long?, val deviceNow: Long?)
+/**
+ * Times are unix seconds; null = never / none / clock not set.
+ * [deviceClock]: the turtle's clock whatever it says, even unsynced (e.g.
+ * 2000-01-01 after the RTC lost power); null on firmware before 2026-10-08
+ * (12-byte Shore) or when it can't be read.
+ * [clockSource]: what set the clock this boot; null before turtleOS 2.5.1
+ * (16-byte Shore).
+ */
+data class Shore(
+    val lastShoreSync: Long?, val journeyId: Long?, val deviceNow: Long?,
+    val deviceClock: Long? = null,
+    val clockSource: ClockSource? = null,
+)
+
+/** Shore `clock_source`. */
+enum class ClockSource(val label: String) {
+    NONE("Not set"), RTC("Clock chip"), NTP("Internet (NTP)"), GPS("GPS"), PHONE("A phone"), UNKNOWN("—");
+
+    companion object {
+        fun of(v: Int) = entries.getOrNull(v)?.takeIf { it != UNKNOWN } ?: UNKNOWN
+    }
+}
 
 object TurtleCodec {
     fun contractInfo(b: ByteArray): ContractInfo? {
@@ -219,6 +243,9 @@ object TurtleCodec {
         if (b.size < 12) return null
         val x = le(b)
         fun t(v: Long) = if (v == 0L) null else v
-        return Shore(t(x.u32()), t(x.u32()), t(x.u32()))
+        val s = Shore(t(x.u32()), t(x.u32()), t(x.u32()))
+        if (b.size < 16) return s
+        val withClock = s.copy(deviceClock = t(x.u32()))
+        return if (b.size < 17) withClock else withClock.copy(clockSource = ClockSource.of(x.u8()))
     }
 }

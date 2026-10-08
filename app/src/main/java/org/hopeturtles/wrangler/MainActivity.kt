@@ -143,6 +143,7 @@ private fun Main(vm: WranglerViewModel) {
         val live = state is LinkState.Ready && tel.lastUpdateMs > 0 &&
             now - tel.lastUpdateMs < Format.LIVE_STALE_MS
         val env by vm.envHistory.collectAsStateWithLifecycle()
+        val stampLog by vm.stampLog.collectAsStateWithLifecycle()
         var showBattery by rememberSaveable { mutableStateOf(false) }
         var showBottle by rememberSaveable { mutableStateOf(false) }
         var showMap by rememberSaveable { mutableStateOf(false) }
@@ -169,6 +170,10 @@ private fun Main(vm: WranglerViewModel) {
             bondState = bond, notice = notice, busy = busy, run = run, say = vm::say,
             onPickOnMap = { showMap = true },
             onServo = vm::servoTo,
+            stampLog = stampLog,
+            onStamp = vm::stamp,
+            onSetClock = vm::setTurtleClock,
+            onSecureMode = vm::setSecureMode,
             onPair = vm::pair,
             onTest = { vm.testCommand(tel) },
             onDisconnect = vm::disconnect,

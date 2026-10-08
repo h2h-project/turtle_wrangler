@@ -142,6 +142,12 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
         }
     }
 
+    /** Read one Turtle-service characteristic now instead of waiting for its
+     *  next notification (e.g. Shore after TIME_SET; it notifies once a minute). */
+    suspend fun reread(uuid: UUID) {
+        read(TurtleUuids.TURTLE_SERVICE, uuid)?.let { apply(uuid, it) }
+    }
+
     /** Write with response. True when the turtle acknowledged the write. */
     suspend fun write(service: UUID, uuid: UUID, value: ByteArray): Boolean {
         val ch = char(service, uuid) ?: return false
