@@ -1,12 +1,15 @@
 package org.hopeturtles.wrangler.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -24,9 +27,11 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.hopeturtles.wrangler.R
 import org.hopeturtles.wrangler.ui.theme.Wrangler
 
 /**
@@ -38,9 +43,24 @@ import org.hopeturtles.wrangler.ui.theme.Wrangler
 fun WranglerTopBar(
     title: String, status: String?, statusOk: Boolean, onSettings: () -> Unit,
     onStatusClick: (() -> Unit)? = null, statusAction: String = "Scan",
+    connected: Boolean? = null,
 ) {
     TopAppBar(
-        title = { Text(title, fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 18.sp) },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // The app icon's smiling ASCII turtle: green = connected, grey = not.
+                // The art fills the middle half of its 108-unit canvas, hence 66 dp
+                // for a turtle about 33 dp wide; the offsets trim the empty margin.
+                if (connected != null) Icon(
+                    painterResource(R.drawable.ic_launcher_foreground),
+                    contentDescription = if (connected) "Connected" else "Not connected",
+                    tint = if (connected) Wrangler.Primary else Wrangler.TextMuted,
+                    modifier = Modifier.size(66.dp).offset(x = (-14).dp),
+                )
+                Text(title, fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 18.sp,
+                    modifier = Modifier.offset(x = if (connected != null) (-24).dp else 0.dp))
+            }
+        },
         actions = {
             if (status != null && onStatusClick != null) {
                 OutlinedButton(
@@ -84,6 +104,22 @@ fun WCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> 
 @Composable
 fun CardLabel(text: String) {
     Text(text, fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 15.sp)
+}
+
+/** A card title with a status pill at the right: green when [ok], pink tint when not. */
+@Composable
+fun CardLabelWithPill(text: String, pill: String?, ok: Boolean) {
+    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Text(text, fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 15.sp,
+            modifier = Modifier.weight(1f))
+        if (pill != null) Text(
+            pill, color = if (ok) Wrangler.Primary else Wrangler.PinkDark,
+            fontSize = 12.sp, fontWeight = FontWeight.Bold,
+            modifier = Modifier
+                .background(if (ok) Wrangler.Light else Wrangler.PinkTint, RoundedCornerShape(50))
+                .padding(horizontal = 10.dp, vertical = 3.dp),
+        )
+    }
 }
 
 @Composable

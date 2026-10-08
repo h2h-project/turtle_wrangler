@@ -16,8 +16,8 @@ android {
         applicationId = "org.hopeturtles.wrangler"
         minSdk = 31      // Android 12: BLUETOOTH_SCAN/CONNECT permission model only
         targetSdk = 37
-        versionCode = 4
-        versionName = "0.2.2"
+        versionCode = 5
+        versionName = "0.2.3"
     }
 
     buildTypes {

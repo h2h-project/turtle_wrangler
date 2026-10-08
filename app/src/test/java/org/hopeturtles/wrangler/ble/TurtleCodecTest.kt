@@ -102,6 +102,14 @@ class TurtleCodecTest {
         assertNull(n.xteM)                       // 0x7FFF sentinel: not computed yet
         assertEquals(NavState.SAFE, n.state); assertEquals(NavFault.GPS_LOST, n.fault)
         assertEquals(false, n.feathering)
+        assertNull(n.compassOffsetDeg)           // 13-byte Nav: before 2026-10-09
+    }
+
+    @Test fun nav_compass_offset() {
+        // struct.pack("<HHIhBBBh", 2473, 552, 4213, 0x7FFF, 4, 2, 0, -12)
+        val n = TurtleCodec.nav(hex("a909280275100000ff7f040200f4ff"))!!
+        near(247.3, n.headingDeg)
+        assertEquals(-12, n.compassOffsetDeg)
     }
 
     @Test fun targets() {

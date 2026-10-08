@@ -60,21 +60,22 @@ fun TurtleHome(
     onSetClock: () -> Unit,
     onSecureMode: (Boolean) -> Unit,
     onPair: () -> Unit,
-    onTest: () -> Unit,
     onDisconnect: () -> Unit,
     onSettings: () -> Unit,
 ) {
+    // The turtle logo's colour says connected; text only for the other states.
     val (statusText, ok) = when (state) {
         is LinkState.Connecting -> "Connecting" to false
         is LinkState.Preparing -> state.step to false
-        is LinkState.Ready -> (if (state.readOnly) "Read-only" else "Connected") to true
+        is LinkState.Ready -> (if (state.readOnly) "Read-only" else null) to true
         is LinkState.Disconnected -> "Disconnected" to false
     }
     Scaffold(
         topBar = {
             // Once the link has dropped, the status is the way back: tap to scan again.
-            WranglerTopBar("🐢 ${tel.name ?: "Turtle"}", statusText, ok, onSettings,
-                onStatusClick = if (state is LinkState.Disconnected) onDisconnect else null)
+            WranglerTopBar(tel.name ?: "Turtle", statusText, ok, onSettings,
+                onStatusClick = if (state is LinkState.Disconnected) onDisconnect else null,
+                connected = state is LinkState.Ready)
         },
         bottomBar = {
             NavigationBar(containerColor = Wrangler.Surface) {
@@ -116,7 +117,10 @@ fun TurtleHome(
                     busy = busy, notice = notice, log = stampLog, run = run, onStamp = onStamp,
                     onSetClock = onSetClock,
                 )
-                Tab.DIAGNOSTICS -> LinkPanel(state, tel, bondState, notice, busy, onPair, onSetClock, onSecureMode, onTest, onDisconnect)
+                Tab.DIAGNOSTICS -> DiagnosticsTab(
+                    state, tel, bondState, notice, busy, run = run, say = say,
+                    onPair = onPair, onSetClock = onSetClock, onSecureMode = onSecureMode, onDisconnect = onDisconnect,
+                )
             }
         }
     }

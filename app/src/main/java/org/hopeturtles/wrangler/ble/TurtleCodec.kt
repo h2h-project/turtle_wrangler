@@ -45,9 +45,12 @@ data class Position(
 enum class NavState { BOOT, ACQUIRE, SAIL_NAV, ARRIVAL, SAFE, UNKNOWN }
 enum class NavFault { NONE, GPS_NEVER_ACQUIRED, GPS_LOST, NO_WAYPOINTS, OTHER }
 
+/** [compassOffsetDeg]: config `compass_offset_deg`, already in [headingDeg];
+ *  null on firmware before 2026-10-09 (13-byte Nav). */
 data class Nav(
     val headingDeg: Double?, val bearingToTargetDeg: Double?, val distToTargetM: Long?,
     val xteM: Int?, val state: NavState, val fault: NavFault?, val feathering: Boolean?,
+    val compassOffsetDeg: Int? = null,
 )
 
 enum class TargetSource { NONE, SET_WAYPOINTS, SET_DESTINATION, MISSION_WAYPOINTS, MISSION_DESTINATION, UNKNOWN }
@@ -180,6 +183,7 @@ object TurtleCodec {
                 3 -> NavFault.NO_WAYPOINTS; NA_U8 -> null; else -> NavFault.OTHER
             },
             feathering = when (trim) { 0 -> false; 1 -> true; else -> null },
+            compassOffsetDeg = if (b.size < 15) null else x.i16().takeIf { it != NA_I16 },
         )
     }
 

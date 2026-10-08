@@ -60,6 +60,43 @@ object Payloads {
             else -> NotStamped.OTHER
         }
 
+    /** COMPASS_SET_OFFSET `<h>` degrees (clamped to −180..180). */
+    fun compassOffset(deg: Int): ByteArray = le(2).putShort(deg.coerceIn(-180, 180).toShort()).array()
+
+    /**
+     * The offset that makes the current [headingDeg] read 0 (the bow points
+     * at true north now): old offset − heading, wrapped to −180..180.
+     */
+    fun northOffset(currentOffset: Int, headingDeg: Double): Int {
+        var o = Math.round(currentOffset - headingDeg).toInt() % 360
+        if (o > 180) o -= 360
+        if (o < -180) o += 360
+        return o
+    }
+
+    /** NAV_LUFF_SWEEP OK → `<H>` wind × 10; null = `0xFFFF`, the sweep ended without a wind angle. */
+    fun sweepWind(p: ByteArray): Double? {
+        if (p.size < 2) return null
+        val v = rd(p).short.toInt() and 0xFFFF
+        return if (v == 0xFFFF) null else v / 10.0
+    }
+
+    /** NAV_LUFF_SWEEP WRONG_STATE → `<B>` nav state; null = `0xFF`, the autopilot is off. */
+    fun sweepWrongState(p: ByteArray): NavState? =
+        if (p.isEmpty() || p[0].toInt() and 0xFF == 0xFF) null
+        else NavState.entries.getOrElse(p[0].toInt() and 0xFF) { NavState.UNKNOWN }
+
+    /** SERVO_BENCH_SWEEP OK → `<HHB>` wind × 10, alternate wind × 10, confidence %. */
+    fun benchSweep(p: ByteArray): BenchSweep? {
+        if (p.size < 5) return null
+        val b = rd(p)
+        fun x10(v: Int) = if (v == 0xFFFF) null else v / 10.0
+        val wind = x10(b.short.toInt() and 0xFFFF)
+        val alt = x10(b.short.toInt() and 0xFFFF)
+        val conf = (b.get().toInt() and 0xFF).takeIf { it != 0xFF }
+        return BenchSweep(wind, alt, conf)
+    }
+
     /** DEST_SET_HERE OK → `<ii>` the stamped lat/lon × 1e7. */
     fun latLon(p: ByteArray): LatLon? {
         if (p.size < 8) return null
@@ -82,3 +119,6 @@ enum class NotStamped(val why: String) {
     NO_FIX_NO_VALUES("no GPS fix and no sensor values"),
     OTHER("the turtle was busy sampling — try again"),
 }
+
+/** SERVO_BENCH_SWEEP result: the wind angle, the other side's, and how sure (0–100 %). */
+data class BenchSweep(val windDeg: Double?, val altWindDeg: Double?, val confidencePct: Int?)

@@ -175,7 +175,6 @@ private fun Main(vm: WranglerViewModel) {
             onSetClock = vm::setTurtleClock,
             onSecureMode = vm::setSecureMode,
             onPair = vm::pair,
-            onTest = { vm.testCommand(tel) },
             onDisconnect = vm::disconnect,
             onSettings = { showSettings = true },
         )

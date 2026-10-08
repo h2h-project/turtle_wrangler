@@ -388,16 +388,6 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
         _notice.value = Notice(text, ok)
     }
 
-    /**
-     * Phase 1 round-trip check: re-send the turtle's current telemetry
-     * interval. Harmless (nothing changes) but exercises the whole command
-     * path, including bonding.
-     */
-    fun testCommand(tel: TurtleTelemetry) {
-        val secs = tel.status?.intervalS ?: 120
-        command("Test command", Op.TELEMETRY_SET_INTERVAL, Payloads.u16(secs))
-    }
-
     override fun onCleared() {
         try { getApplication<Application>().unregisterReceiver(bondReceiver) } catch (_: Exception) {}
         disconnect()

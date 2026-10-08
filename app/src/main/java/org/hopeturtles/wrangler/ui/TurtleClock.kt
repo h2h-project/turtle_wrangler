@@ -1,7 +1,10 @@
 package org.hopeturtles.wrangler.ui
 
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.height
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -9,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -41,13 +45,9 @@ fun ClockCard(tel: TurtleTelemetry, enabled: Boolean, onSetClock: () -> Unit) {
         while (true) { delay(1_000); value = System.currentTimeMillis() }
     }
     WCard {
-        CardLabel("Turtle clock")
-        when (synced) {
-            true -> Text("● Set", color = Wrangler.Primary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            false -> Text("Not set: stamps and journeys are refused", color = Wrangler.PinkDark,
-                fontWeight = FontWeight.Bold, fontSize = 14.sp)
-            null -> {}
-        }
+        CardLabelWithPill("Turtle clock", when (synced) { true -> "Set"; false -> "Not set"; null -> null },
+            ok = synced == true)
+        if (synced == false) Muted("Stamps and journeys are refused until the clock is set.")
         val turtleMs = clock?.let { it * 1000 + (now - receivedAt) }
         val tz = shore?.tzOffsetMin
         Field("Turtle UTC", turtleMs?.let { fullTime(it, 0) })
@@ -109,9 +109,19 @@ fun SecureModeCard(tel: TurtleTelemetry, enabled: Boolean, onSecureMode: (Boolea
     val s = tel.status ?: return
     var ask by remember { mutableStateOf<Boolean?>(null) }
     WCard {
-        CardLabel("Secure mode")
+        val on = s.secureMode || s.secureModeBlocked
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Secure mode", fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 15.sp,
+                modifier = Modifier.weight(1f))
+            // Asks first; the switch only moves once the turtle reports the change.
+            Switch(
+                checked = on, onCheckedChange = { ask = it },
+                enabled = enabled && (on || !s.rtcBatteryFault),
+                colors = SwitchDefaults.colors(checkedTrackColor = Wrangler.Primary),
+            )
+        }
         when {
-            s.secureMode -> Text("● On: GPS time isn't trusted", color = Wrangler.Primary,
+            s.secureMode -> Text("On: GPS time isn't trusted", color = Wrangler.Primary,
                 fontWeight = FontWeight.Bold, fontSize = 14.sp)
             s.secureModeBlocked -> {
                 Text("Blocked by the clock-chip battery", color = Wrangler.PinkDark,
@@ -119,14 +129,9 @@ fun SecureModeCard(tel: TurtleTelemetry, enabled: Boolean, onSecureMode: (Boolea
                 Muted("Secure mode is asked for but can't be in force until the coin cell is replaced. " +
                     "GPS time is still refused.")
             }
-            else -> Text("Off", color = Wrangler.Dark, fontWeight = FontWeight.Bold, fontSize = 14.sp)
         }
         Muted("For missions where GPS may be spoofed. The turtle keeps time only from its clock chip, " +
             "so it can't turn on while that chip's battery is faulty.")
-        Spacer(Modifier.height(8.dp))
-        val on = s.secureMode || s.secureModeBlocked
-        GreenOutlineButton(if (on) "Turn secure mode off" else "Turn secure mode on", { ask = !on },
-            enabled = enabled && (on || !s.rtcBatteryFault))
         if (!on && s.rtcBatteryFault) Muted("Replace the clock-chip coin cell first.")
     }
     ask?.let { turnOn ->

@@ -55,6 +55,28 @@ class PayloadsTest {
         assertArrayEquals(hex("b6fe"), Payloads.tzOffset(-330))
     }
 
+    @Test fun compass() {
+        assertArrayEquals(hex("56ff"), Payloads.compassOffset(-170))     // struct.pack("<h", -170)
+        assertArrayEquals(hex("b400"), Payloads.compassOffset(400))      // clamped to 180
+        assertEquals(-80, Payloads.northOffset(0, 80.0))                 // config.py's own example
+        assertEquals(-80, Payloads.northOffset(-80, 0.4))                // already reads north: unchanged
+        assertEquals(170, Payloads.northOffset(-170, 20.0))              // -190 wraps to 170
+        assertEquals(-170, Payloads.northOffset(10, 180.0))
+        assertEquals(10, Payloads.northOffset(5, 355.0))                 // heading just west of north
+    }
+
+    @Test fun sweeps() {
+        assertEquals(225.3, Payloads.sweepWind(hex("cd08"))!!, 1e-9)
+        assertNull(Payloads.sweepWind(hex("ffff")))                      // ended without a wind angle
+        assertEquals(NavState.ARRIVAL, Payloads.sweepWrongState(hex("03")))
+        assertNull(Payloads.sweepWrongState(hex("ff")))                  // autopilot off
+        val b = Payloads.benchSweep(hex("cd08430550"))!!                 // struct.pack("<HHB", 2253, 1347, 80)
+        assertEquals(225.3, b.windDeg!!, 1e-9); assertEquals(134.7, b.altWindDeg!!, 1e-9)
+        assertEquals(80, b.confidencePct)
+        assertNull(Payloads.benchSweep(hex("cd084305ff"))!!.confidencePct)
+        assertNull(Payloads.benchSweep(hex("cd08")))
+    }
+
     @Test fun secure_mode_refused() {
         assertTrue(Payloads.secureRefusedForBattery(hex("01")))
         assertFalse(Payloads.secureRefusedForBattery(hex("FF")))
