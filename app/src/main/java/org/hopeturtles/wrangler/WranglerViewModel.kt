@@ -16,7 +16,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withTimeoutOrNull
 import org.hopeturtles.wrangler.ble.CommandClient
 import org.hopeturtles.wrangler.ble.CommandResult
 import org.hopeturtles.wrangler.ble.FoundTurtle
@@ -84,9 +86,13 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
         _noTurtles.value = false
         scanner.start()
         scanWatch?.cancel()
+        // Stop as soon as a turtle is listed; flag "no turtles" if none
+        // turns up within NO_TURTLE_AFTER_MS (the scan keeps going then).
         scanWatch = viewModelScope.launch {
-            delay(NO_TURTLE_AFTER_MS)
-            if (scanner.found.value.isEmpty()) {
+            val hit = withTimeoutOrNull(NO_TURTLE_AFTER_MS) { scanner.found.first { it.isNotEmpty() } }
+            if (hit != null) {
+                scanner.stop()
+            } else {
                 _noTurtles.value = true
                 _lastSeen.value = lastSeenStore.all()
             }

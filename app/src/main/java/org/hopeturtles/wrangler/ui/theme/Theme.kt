@@ -20,6 +20,9 @@ object Wrangler {
     val Pink = Color(0xFFEC8FC0)
     val PinkDark = Color(0xFFB8508E)
     val PinkTint = Color(0xFFFDF1F8)
+    /** The site's one standout call-to-action colour (main.css, commission
+     *  rollover). Small accents only, e.g. the "● In range" dot. */
+    val Fuchsia = Color(0xFFFF00FF)
     val CardBorder = Color(0xFFDBE6DD)
 }
 

@@ -129,7 +129,7 @@ private fun Main(vm: WranglerViewModel) {
         LaunchedEffect(Unit) { vm.startScan() }
         ScanScreen(
             found, scanning, noTurtles, lastSeen,
-            onScan = vm::startScan, onPick = vm::connect, onSettings = { showSettings = true },
+            onScan = vm::startScan, onCancel = vm::stopScan, onPick = vm::connect,
         )
     } else {
         val state by current.state.collectAsStateWithLifecycle()
