@@ -25,6 +25,16 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import android.content.Intent
+import android.provider.Settings
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -49,6 +59,7 @@ private const val DONE_HOLD_MS = 700L
 @Composable
 fun ConnectingDrawer(
     state: LinkState, hs: Handshake, shown: MutableTransitionState<Boolean>, onStop: () -> Unit,
+    onForget: () -> Boolean,
     modifier: Modifier = Modifier,
 ) {
     // Set while a reconnect cycle runs (waiting or setting up again).
@@ -107,8 +118,44 @@ fun ConnectingDrawer(
                         },
                     )
                 }
+                if (failed && hs.staleBond) StaleBondHelp(onForget)
             } }
         }
+    }
+}
+
+/**
+ * The turtle forgot this phone but the phone still holds the old pairing.
+ * Forget it here (or in Android's Bluetooth settings), then pair again.
+ */
+@Composable
+private fun StaleBondHelp(onForget: () -> Boolean) {
+    val context = LocalContext.current
+    // null = not tried yet; true = forgotten; false = Android refused.
+    var forgot by remember { mutableStateOf<Boolean?>(null) }
+    val body = Color.White.copy(alpha = 0.85f)
+    Column(Modifier.padding(top = 4.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        when (forgot) {
+            null -> {
+                Text("Forget the old pairing on this phone, then pair again.", color = body, fontSize = 13.sp)
+                Button(
+                    onClick = { forgot = onForget() },
+                    colors = ButtonDefaults.buttonColors(containerColor = Color.White),
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Forget the old pairing", color = Wrangler.Primary, fontWeight = FontWeight.Bold) }
+            }
+            true -> Text("Forgotten. Now tap Scan and connect again; when the app asks, triple-click " +
+                "the turtle to open its Bluetooth screen and enter the code it shows.", color = Color.White, fontSize = 13.sp)
+            false -> Text("Android wouldn't forget it from here. In Bluetooth settings, tap the turtle and " +
+                "choose Forget (or Unpair), then come back, tap Scan and pair again.", color = Color.White, fontSize = 13.sp)
+        }
+        if (forgot != true) OutlinedButton(
+            onClick = {
+                try { context.startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS)) } catch (_: Exception) {}
+            },
+            border = BorderStroke(1.dp, Color.White),
+            modifier = Modifier.fillMaxWidth(),
+        ) { Text("Open Bluetooth settings", color = Color.White) }
     }
 }
 

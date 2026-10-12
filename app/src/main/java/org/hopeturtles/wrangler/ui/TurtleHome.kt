@@ -2,7 +2,6 @@ package org.hopeturtles.wrangler.ui
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -17,6 +16,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.zIndex
@@ -29,7 +29,7 @@ import org.hopeturtles.wrangler.ble.TurtleTelemetry
 import org.hopeturtles.wrangler.data.StampEntry
 import org.hopeturtles.wrangler.ui.theme.Wrangler
 
-/** The four sections, in the drawer under the top bar. Settings is not one — it's the gear. */
+/** The four sections, in the helm (the drawer under the top bar). Settings is not one — it's the gear. */
 enum class Tab(val label: String, val icon: ImageVector) {
     DASHBOARD("Dashboard", Icons.Filled.Home),
     NAVIGATE("Navigate", @Suppress("DEPRECATION") Icons.Filled.Send),
@@ -62,15 +62,16 @@ fun TurtleHome(
     onSecureMode: (Boolean) -> Unit,
     onPair: () -> Unit,
     onDisconnect: () -> Unit,
+    onForget: () -> Boolean,
     settingsOpen: Boolean,
     onSettings: (Boolean) -> Unit,
     quietRun: RunCommand,
 ) {
-    // The sections drawer: swipe down on the top bar (or tap its handle).
-    var tabsOpen by rememberSaveable { mutableStateOf(false) }
+    // The helm (sections drawer): swipe down on the top bar, or tap its line or the turtle.
+    var helmOpen by rememberSaveable { mutableStateOf(false) }
     // Back closes the drawer first, then Settings (which sits over the sections).
-    BackHandler(enabled = settingsOpen && !tabsOpen) { onSettings(false) }
-    BackHandler(enabled = tabsOpen) { tabsOpen = false }
+    BackHandler(enabled = settingsOpen && !helmOpen) { onSettings(false) }
+    BackHandler(enabled = helmOpen) { helmOpen = false }
     // The turtle logo's colour says connected. Setup progress lives in the
     // connecting drawer, not here; text only for read-only and disconnected.
     val (statusText, ok) = when (state) {
@@ -79,20 +80,33 @@ fun TurtleHome(
         is LinkState.Disconnected -> "Disconnected" to false
     }
     val connecting = rememberConnectingDrawer(state, handshake)
-    // No sections drawer while the connecting drawer is down (or going up).
-    val canOpenTabs = !connecting.currentState && !connecting.targetState
-    LaunchedEffect(canOpenTabs) { if (!canOpenTabs) tabsOpen = false }
+    // No helm while the connecting drawer is down (or going up).
+    val canOpenHelm = !connecting.currentState && !connecting.targetState
+    LaunchedEffect(canOpenHelm) { if (!canOpenHelm) helmOpen = false }
     Scaffold(
         topBar = {
             // Swipe down anywhere on the bar to show the sections, up to hide them.
-            Column(Modifier.verticalSwipe(onDown = { if (canOpenTabs) tabsOpen = true }, onUp = { tabsOpen = false })) {
+            Box(Modifier.verticalSwipe(onDown = { if (canOpenHelm) helmOpen = true }, onUp = { helmOpen = false })) {
                 // Once the link has dropped, the status is the way back: tap to scan again.
                 WranglerTopBar(tel.name ?: "Turtle", statusText, ok,
-                    onSettings = { tabsOpen = false; onSettings(!settingsOpen) },
+                    onSettings = { helmOpen = false; onSettings(!settingsOpen) },
                     onStatusClick = if (state is LinkState.Disconnected) onDisconnect else null,
                     connected = state is LinkState.Ready, settingsOpen = settingsOpen,
-                    subtitle = if (settingsOpen) "Settings" else tab.label)
-                TabHandle(tabsOpen, visible = canOpenTabs) { tabsOpen = !tabsOpen }
+                    subtitle = if (settingsOpen) "Settings" else tab.label,
+                    // The turtle goes home: from any other section (or Settings) back to
+                    // the Dashboard; on the Dashboard it opens the helm.
+                    onLogo = {
+                        if (settingsOpen || tab != Tab.DASHBOARD) {
+                            helmOpen = false; onSettings(false); onTab(Tab.DASHBOARD)
+                        } else if (canOpenHelm) helmOpen = !helmOpen
+                    },
+                    linkDot = when (state) {
+                        is LinkState.Ready -> LinkDot.CONNECTED
+                        is LinkState.Disconnected -> LinkDot.OFF
+                        else -> LinkDot.CONNECTING
+                    })
+                HelmHandle(helmOpen, visible = canOpenHelm, onToggle = { helmOpen = !helmOpen },
+                    modifier = Modifier.align(Alignment.BottomCenter))
             }
         },
         containerColor = Wrangler.Background,
@@ -117,10 +131,11 @@ fun TurtleHome(
                 )
             }
             // Over the tabs, so they don't jump when it slides away.
-            ConnectingDrawer(state, handshake, connecting, onStop = onDisconnect, modifier = Modifier.zIndex(1f))
-            TabDrawer(tabsOpen, tab, settingsOpen,
-                onPick = { tabsOpen = false; onSettings(false); onTab(it) },
-                onClose = { tabsOpen = false },
+            ConnectingDrawer(state, handshake, connecting, onStop = onDisconnect, onForget = onForget,
+                modifier = Modifier.zIndex(1f))
+            HelmDrawer(helmOpen, tab, settingsOpen,
+                onPick = { helmOpen = false; onSettings(false); onTab(it) },
+                onClose = { helmOpen = false },
                 modifier = Modifier.zIndex(2f))
         }
     }

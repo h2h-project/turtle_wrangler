@@ -28,6 +28,22 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -50,9 +66,12 @@ fun WranglerTopBar(
     connected: Boolean? = null,
     settingsOpen: Boolean = false,
     subtitle: String? = null,
+    onLogo: (() -> Unit)? = null,
+    linkDot: LinkDot? = null,
 ) {
-    // With a [subtitle] (a turtle's section), the name and section sit on the
-    // right beside the gear, and the link status moves left beside the logo.
+    // With a [subtitle] (a turtle's section), the section sits beside the
+    // logo with the link status, and the turtle's name beside the gear.
+    // [onLogo]: tapping the turtle goes to the Dashboard, or opens the helm there.
     val titleEnd = subtitle != null
     @Composable
     fun Status() {
@@ -82,25 +101,31 @@ fun WranglerTopBar(
                 // bar: solid = connected, faded = not.
                 // The art fills the middle half of its 108-unit canvas, hence 66 dp
                 // for a turtle about 33 dp wide; the offsets trim the empty margin.
+                // Drawn 20% larger than its 66 dp slot (scale, so the bar keeps its height).
                 if (connected != null) Icon(
                     painterResource(R.drawable.ic_launcher_foreground),
-                    contentDescription = if (connected) "Connected" else "Not connected",
+                    contentDescription = (if (connected) "Connected" else "Not connected") +
+                        if (onLogo != null) ". Home" else "",
                     tint = if (connected) Color.White else Color.White.copy(alpha = 0.45f),
-                    modifier = Modifier.size(66.dp).offset(x = (-14).dp),
+                    modifier = Modifier.size(66.dp).offset(x = (-14).dp).scale(1.2f)
+                        .then(if (onLogo != null) Modifier.clip(CircleShape).clickable(onClick = onLogo) else Modifier),
                 )
-                Row(Modifier.offset(x = if (connected != null) (-24).dp else 0.dp),
+                Row(Modifier.offset(x = if (connected != null) (-20).dp else 0.dp),
                     verticalAlignment = Alignment.CenterVertically) {
-                    if (titleEnd) Status()
-                    else Text(title, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 18.sp)
+                    if (titleEnd) {
+                        Text(subtitle!!, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 17.sp,
+                            maxLines = 1)
+                        Spacer(Modifier.width(10.dp))
+                        Status()
+                    } else Text(title, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 18.sp)
                 }
             }
         },
         actions = {
             if (titleEnd) {
-                Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 8.dp)) {
-                    Text(title, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 17.sp, maxLines = 1)
-                    Text(subtitle!!, color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp, maxLines = 1)
-                }
+                Text(title, color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp).widthIn(max = 140.dp))
+                linkDot?.let { LinkBullet(it) }
             } else Status()
             // Highlighted while Settings is open (it's not a tab, so no tab is).
             IconButton(
@@ -116,13 +141,35 @@ fun WranglerTopBar(
     )
 }
 
+/** The link bullet after the turtle's name: connected, connecting or not. */
+enum class LinkDot { CONNECTED, CONNECTING, OFF }
+
+/** Pink when connected, flashing white while connecting, grey when not. */
+@Composable
+private fun LinkBullet(dot: LinkDot) {
+    val flash by rememberInfiniteTransition(label = "linkDot").animateFloat(
+        initialValue = 1f, targetValue = 0.2f,
+        animationSpec = infiniteRepeatable(tween(500), RepeatMode.Reverse), label = "linkDot",
+    )
+    val (color, desc) = when (dot) {
+        LinkDot.CONNECTED -> Wrangler.Pink to "Connected"
+        LinkDot.CONNECTING -> Color.White.copy(alpha = flash) to "Connecting"
+        LinkDot.OFF -> Color(0xFFB0B7B2) to "Not connected"
+    }
+    Box(Modifier.padding(start = 6.dp).size(9.dp).background(color, CircleShape)
+        .semantics { contentDescription = desc })
+}
+
+/** Card colour; Settings provides its own pale green. */
+val LocalCardColor = staticCompositionLocalOf { Wrangler.Surface }
+
 /** White card with the site's thin green-grey border. */
 @Composable
 fun WCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = Wrangler.Surface),
+        colors = CardDefaults.cardColors(containerColor = LocalCardColor.current),
         border = BorderStroke(1.dp, Wrangler.CardBorder),
     ) {
         Column(Modifier.padding(14.dp), content = content)
@@ -164,7 +211,7 @@ fun Field(label: String, value: String?) {
     }
 }
 
-/** The one pink element a screen may have: ghost style, never a solid fill. */
+/** Pink ghost button: the accent for a notable action. */
 @Composable
 fun PinkButton(text: String, onClick: () -> Unit, enabled: Boolean = true, modifier: Modifier = Modifier) {
     OutlinedButton(

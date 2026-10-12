@@ -21,6 +21,7 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -72,9 +73,9 @@ fun SettingsScreen(
     }
     LaunchedEffect(canCommand) { if (canCommand) readSsid() }
 
-    // White cards on the landing screen's green, like the top bar.
-    Column(
-        Modifier.fillMaxSize().background(Wrangler.Primary).padding(16.dp).verticalScroll(rememberScrollState()),
+    // Pale green cards on a lighter shade of the landing green.
+    CompositionLocalProvider(LocalCardColor provides Wrangler.SettingsCard) { Column(
+        Modifier.fillMaxSize().background(Wrangler.SettingsBackground).padding(16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         NoticeCard(notice, busy)
@@ -128,7 +129,7 @@ fun SettingsScreen(
             CardLabel("Bluetooth")
             Muted("A launched turtle should have Bluetooth off: no radio, no power draw, nothing to connect to.")
             Spacer(Modifier.height(8.dp))
-            // The screen's one pink element: the step that can't be undone from here.
+            // Pink: the step that can't be undone from here.
             PinkButton("Turn off Bluetooth for the voyage", { ask = SettingsAsk.BLE_OFF }, enabled = enabled)
         }
 
@@ -142,7 +143,7 @@ fun SettingsScreen(
             DangerButton("Reboot the turtle", enabled) { ask = SettingsAsk.REBOOT }
             DangerButton("Switch to airOS", enabled) { ask = SettingsAsk.AIROS }
         }
-    }
+    } }
 
     when (ask) {
         SettingsAsk.BLE_OFF -> ConfirmDialog(

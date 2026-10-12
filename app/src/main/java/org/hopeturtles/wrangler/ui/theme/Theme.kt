@@ -6,8 +6,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
 // Palette from hopeturtles.org (public/css/main.css :root) — see the turtleOS
-// repo's docs/wrangler/README.md "Visual identity". Pink is a spotlight:
-// at most one pink element per screen, ghost/tint only, never a solid fill.
+// repo's docs/wrangler/README.md "Visual identity". Green is the base;
+// pink and fuchsia are the app's accent colours.
 object Wrangler {
     val Primary = Color(0xFF017919)
     val Accent = Color(0xFF23B053)
@@ -20,10 +20,13 @@ object Wrangler {
     val Pink = Color(0xFFEC8FC0)
     val PinkDark = Color(0xFFB8508E)
     val PinkTint = Color(0xFFFDF1F8)
-    /** The site's one standout call-to-action colour (main.css, commission
-     *  rollover). Small accents only, e.g. the "● In range" dot. */
+    /** The site's standout call-to-action colour (main.css, commission
+     *  rollover). An accent: the "● In range" dot, the sparklines. */
     val Fuchsia = Color(0xFFFF00FF)
     val CardBorder = Color(0xFFDBE6DD)
+    /** Settings page: Primary at 60%, and its cards at 10%, mixed with white. */
+    val SettingsBackground = Color(0xFF67AF75)
+    val SettingsCard = Color(0xFFE6F2E8)
 }
 
 private val Scheme = lightColorScheme(

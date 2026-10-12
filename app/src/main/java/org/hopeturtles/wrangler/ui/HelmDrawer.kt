@@ -53,36 +53,36 @@ fun Modifier.verticalSwipe(onDown: () -> Unit, onUp: () -> Unit): Modifier = poi
 }
 
 /**
- * The short white line under the top bar: swipe down on the bar (or tap it)
- * for the sections. Hidden, but still taking its space so nothing jumps,
- * while [visible] is false (the connecting drawer is down).
+ * The short white line on the top bar's bottom edge: swipe down on the bar
+ * (or tap the line, or the turtle) for the helm (the sections drawer). It overlays the bar
+ * rather than adding height. Hidden while [visible] is false (the
+ * connecting drawer is down).
  */
 @Composable
-fun TabHandle(open: Boolean, visible: Boolean, onToggle: () -> Unit) {
+fun HelmHandle(open: Boolean, visible: Boolean, onToggle: () -> Unit, modifier: Modifier = Modifier) {
+    if (!visible) return
     Box(
-        Modifier.fillMaxWidth().background(Wrangler.Primary)
+        modifier.width(120.dp)
             .clickable(
-                enabled = visible,
                 interactionSource = remember { MutableInteractionSource() }, indication = null,
-                role = Role.Button, onClickLabel = if (open) "Hide sections" else "Show sections",
+                role = Role.Button, onClickLabel = if (open) "Hide the helm" else "Show the helm",
                 onClick = onToggle,
             )
-            .padding(top = 2.dp, bottom = 8.dp),
+            .padding(top = 8.dp, bottom = 6.dp),
         contentAlignment = Alignment.Center,
     ) {
-        if (visible) Box(Modifier.width(64.dp).height(4.dp)
+        Box(Modifier.width(64.dp).height(4.dp)
             .background(Color.White.copy(alpha = if (open) 0.9f else 0.6f), RoundedCornerShape(50)))
-        else Box(Modifier.height(4.dp))
     }
 }
 
 /**
- * Green drawer under the top bar with the four sections (Dashboard,
+ * The helm: green drawer under the top bar with the four sections (Dashboard,
  * Navigate, GPS, Diagnostics), so each page gets the whole screen. Picking
  * one closes it; so do a swipe up, a tap outside, and back.
  */
 @Composable
-fun TabDrawer(
+fun HelmDrawer(
     open: Boolean,
     tab: Tab,
     settingsOpen: Boolean,

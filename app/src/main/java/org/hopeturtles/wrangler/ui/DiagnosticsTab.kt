@@ -259,7 +259,6 @@ private fun WindFinderCard(
         }
         navWind?.let { Field("Nav sweep result", it) }
         Spacer(Modifier.height(8.dp))
-        // The screen's one pink element.
         PinkButton("Run nav sweep", onNavSweep, enabled = enabled)
         Muted("The autopilot's own luff sweep. It runs while the turtle is acquiring or sailing.")
 

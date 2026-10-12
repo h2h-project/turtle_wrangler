@@ -120,6 +120,8 @@ data class Handshake(
     val now: String? = null,
     val found: Map<HandshakeStep, String> = emptyMap(),
     val failed: String? = null,
+    /** Setup stopped because the turtle seems to have forgotten this phone. */
+    val staleBond: Boolean = false,
 )
 
 data class DeviceInfo(val manufacturer: String?, val model: String?, val firmware: String?, val serial: String?)
@@ -181,6 +183,15 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
     // Android often drops the very first link a few hundred ms in (status 22,
     // "terminated by local host"). A drop during setup gets one quiet retry.
     private var setupRetries = 0
+
+    // Stale bond (app plan Phase 7): the turtle lost its keys ("Forget
+    // phones", wiped /ble_bonds.json) but this phone kept its own. Android
+    // encrypts with the old key, fails, and drops the link before any read
+    // completes. Two such drops in a row while Android says "bonded" means
+    // the pairing is stale; retrying can't fix it.
+    private var connectedThisTry = false
+    private var readsThisTry = 0
+    private val earlyDropStatuses = mutableListOf<Int>()
 
     // One pending deferred per operation type; the queue guarantees only one
     // operation is in flight, so these never overlap.
@@ -284,7 +295,7 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
             reply == null -> Read.Timeout
             reply.status == LINK_DROPPED -> Read.NoLink
             reply.status != BluetoothGatt.GATT_SUCCESS -> Read.Status(reply.status)
-            else -> Read.Ok(reply.value ?: ByteArray(0))
+            else -> Read.Ok(reply.value ?: ByteArray(0)).also { readsThisTry++ }
         }
     }
 
@@ -477,6 +488,18 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
         }
     }
 
+    private fun staleBond() {
+        val statuses = earlyDropStatuses.joinToString(", ") { gattStatusName(it) }
+        Log.w(TAG, "stale bond suspected: dropped twice before any read ($statuses)")
+        earlyDropStatuses.clear()
+        try { gatt?.close() } catch (_: Exception) {}
+        gatt = null
+        val why = "The turtle dropped the link twice before answering anything ($statuses). " +
+            "It has probably forgotten this phone while this phone still holds the old pairing."
+        _handshake.update { it.copy(failed = why, staleBond = true) }
+        _state.value = LinkState.Disconnected(why)
+    }
+
     private fun fail(reason: String) {
         Log.w(TAG, reason)
         _handshake.update { it.copy(failed = reason) }
@@ -502,12 +525,22 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
             if (newState == BluetoothProfile.STATE_CONNECTED) {
                 linkUp = true
+                connectedThisTry = true
+                readsThisTry = 0
                 scope.launch { prepare() }
             } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
                 linkUp = false
                 failPending()
                 val prior = _state.value
                 val inSetup = prior is LinkState.Connecting || prior is LinkState.Preparing
+                val early = inSetup && connectedThisTry && readsThisTry == 0 &&
+                    device.bondState == BluetoothDevice.BOND_BONDED && !userClosed
+                connectedThisTry = false
+                if (early) earlyDropStatuses += status else earlyDropStatuses.clear()
+                if (earlyDropStatuses.size >= 2) {
+                    staleBond()
+                    return
+                }
                 if (inSetup && status != BluetoothGatt.GATT_SUCCESS && setupRetries < 1) {
                     retrySetup(status)
                     return

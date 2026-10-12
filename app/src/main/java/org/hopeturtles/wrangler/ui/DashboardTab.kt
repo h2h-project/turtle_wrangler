@@ -27,10 +27,7 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
@@ -73,13 +70,12 @@ fun DashboardTab(
             Banner("Last seen $at — not live", Wrangler.TextMuted, Wrangler.CardBorder.copy(alpha = 0.6f))
         }
         if (safe) {
-            // SAFE takes the screen's one pink slot (tint, not a solid fill).
             Banner("SAFE mode — " + (Format.fault(nav?.fault) ?: "turtle stopped steering"),
                 Wrangler.PinkDark, Wrangler.PinkTint)
         }
 
         Column(Modifier.alpha(if (live) 1f else 0.5f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            HeadingCard(tel, live && !safe)
+            HeadingCard(tel)
             // Tap → full-screen charging graph.
             Tile("Battery", tel.power?.socPct?.let { "$it%" }, Modifier.clickable(onClick = onBattery)) {
                 ChargeLine(tel.power?.currentMa)
@@ -152,28 +148,15 @@ private fun Tile(label: String, value: String?, modifier: Modifier, extra: @Comp
  * heavy ring with fine ticks round the outside (2°, longer every 10° and
  * 30°), a green needle for the heading, a grey bar through the centre for
  * the sail, and a triangle on the ring pointing in at the target bearing.
- * The triangle is pink (outline over tint, never solid) unless SAFE has
- * taken the pink slot, when it goes dark green.
+ * The triangle is pink, outline over tint.
  */
 @Composable
-private fun HeadingCard(tel: TurtleTelemetry, pinkSlot: Boolean) {
+private fun HeadingCard(tel: TurtleTelemetry) {
     val heading = tel.nav?.headingDeg
     val bearing = tel.nav?.bearingToTargetDeg
     val sail = tel.sail?.sailDeg
     val labels = rememberTextMeasurer()
     WCard {
-        Row {
-            Spacer(Modifier.weight(1f))
-            Text(
-                buildAnnotatedString {
-                    withStyle(SpanStyle(color = Wrangler.PinkDark)) { append("● ") }
-                    append("live")
-                },
-                color = Wrangler.Primary, fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                modifier = Modifier.background(Wrangler.Background, RoundedCornerShape(50))
-                    .padding(horizontal = 10.dp, vertical = 2.dp),
-            )
-        }
         Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
             val c = Offset(size.width / 2f, size.height / 2f)
             val ringW = 10.dp.toPx()
@@ -235,13 +218,8 @@ private fun HeadingCard(tel: TurtleTelemetry, pinkSlot: Boolean) {
                     lineTo(base.x - side.x * half, base.y - side.y * half)
                     close()
                 }
-                if (pinkSlot) {
-                    drawPath(tri, Wrangler.PinkTint)
-                    drawPath(tri, Wrangler.PinkDark, style = Stroke(2.5.dp.toPx(), join = StrokeJoin.Round))
-                } else {
-                    drawPath(tri, Wrangler.Light)
-                    drawPath(tri, Wrangler.Dark, style = Stroke(2.5.dp.toPx(), join = StrokeJoin.Round))
-                }
+                drawPath(tri, Wrangler.PinkTint)
+                drawPath(tri, Wrangler.PinkDark, style = Stroke(2.5.dp.toPx(), join = StrokeJoin.Round))
             }
         }
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -253,7 +231,7 @@ private fun HeadingCard(tel: TurtleTelemetry, pinkSlot: Boolean) {
     }
 }
 
-/** Battery charge trend for this connection. */
+/** Charge (battery) or temperature (bottle) trend for this connection, in the fuchsia accent. */
 @Composable
 private fun Sparkline(values: List<Int>) {
     Canvas(Modifier.fillMaxWidth().height(18.dp).padding(top = 4.dp)) {
@@ -266,6 +244,6 @@ private fun Sparkline(values: List<Int>) {
             val y = size.height - (v - lo) / (hi - lo) * size.height
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-        drawPath(path, Wrangler.Primary, style = Stroke(3f, cap = StrokeCap.Round))
+        drawPath(path, Wrangler.Fuchsia, style = Stroke(3f, cap = StrokeCap.Round))
     }
 }

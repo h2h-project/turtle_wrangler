@@ -192,6 +192,24 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
 
     // ------------------------------------------------------------ pairing
 
+    /**
+     * Stale bond: drop this phone's copy of the turtle's pairing, so the next
+     * connect pairs afresh. removeBond() is hidden API, reached by reflection;
+     * false when Android refuses, and the user forgets the turtle in
+     * Android's Bluetooth settings instead.
+     */
+    fun forgetTurtle(): Boolean {
+        val dev = _connection.value?.device ?: return false
+        val ok = try {
+            dev.javaClass.getMethod("removeBond").invoke(dev) as? Boolean ?: false
+        } catch (e: Exception) {
+            Log.w("Wrangler", "removeBond unavailable: $e")
+            false
+        }
+        Log.i("Wrangler", "removeBond -> $ok")
+        return ok
+    }
+
     /** Start bonding. Android shows its passkey dialog; the code is on the
      *  turtle's OLED, which only accepts pairing on its Bluetooth screen. */
     fun pair() {

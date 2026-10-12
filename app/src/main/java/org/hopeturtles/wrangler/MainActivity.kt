@@ -187,6 +187,7 @@ private fun Main(vm: WranglerViewModel) {
             onSecureMode = vm::setSecureMode,
             onPair = vm::pair,
             onDisconnect = vm::disconnect,
+            onForget = vm::forgetTurtle,
             settingsOpen = showSettings,
             onSettings = { showSettings = it },
             quietRun = quietRun,

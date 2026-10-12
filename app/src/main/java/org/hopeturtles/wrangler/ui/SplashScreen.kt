@@ -60,11 +60,12 @@ fun SplashScreen(onDone: () -> Unit) {
     }
     val screen = remember { Animatable(1f) }      // whole-splash opacity (fade-out)
     val turtle = remember { Animatable(0f) }      // turtle opacity (fade-in)
-    val bob by rememberInfiniteTransition(label = "bob").animateFloat(
-        initialValue = -2f, targetValue = 2f,
-        animationSpec = infiniteRepeatable(tween(700, easing = FastOutSlowInEasing), RepeatMode.Reverse),
-        label = "bob",
-    )
+    // Swimming turtle set aside for now; H2H shows instead (see below).
+    // val bob by rememberInfiniteTransition(label = "bob").animateFloat(
+    //     initialValue = -2f, targetValue = 2f,
+    //     animationSpec = infiniteRepeatable(tween(700, easing = FastOutSlowInEasing), RepeatMode.Reverse),
+    //     label = "bob",
+    // )
 
     LaunchedEffect(Unit) {
         launch { turtle.animateTo(1f, tween(FADE_MS)) }
@@ -80,13 +81,16 @@ fun SplashScreen(onDone: () -> Unit) {
         Modifier.fillMaxSize().graphicsLayer { alpha = screen.value }.background(Wrangler.Primary),
         contentAlignment = Alignment.Center,
     ) {
-        AsciiTurtle(
-            frame,
-            Modifier.graphicsLayer {
-                alpha = turtle.value
-                translationY = bob * density
-            },
-        )
+        // AsciiTurtle(
+        //     frame,
+        //     Modifier.graphicsLayer {
+        //         alpha = turtle.value
+        //         translationY = bob * density
+        //     },
+        // )
+        // The frame sequence still sets how long the splash shows.
+        Text("H2H", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 96.sp,
+            modifier = Modifier.graphicsLayer { alpha = turtle.value })
         Column(
             Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 32.dp)
                 .graphicsLayer { alpha = turtle.value },

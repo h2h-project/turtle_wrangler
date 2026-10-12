@@ -14,8 +14,8 @@ Hope Turtles running turtleOS. The firmware lives next door at
   `../turtleOS/device/src/net/ble_telemetry.py` (characteristics) and
   `ble_commands.py` (commands). `TurtleCodec` mirrors them byte for byte.
 - **Visual identity:** the palette in `ui/theme/Theme.kt` comes from
-  hopeturtles.org. Pink is a spotlight: at most one pink element per
-  screen, ghost or tint only, never a solid fill.
+  hopeturtles.org. Green is the base (the landing green for top-level
+  chrome); pink and fuchsia are the app's accent colours, used freely.
 
 ## Layout
 
