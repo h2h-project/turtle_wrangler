@@ -22,6 +22,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -49,14 +50,14 @@ fun BottleGraphScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Bottle · ${name ?: "Turtle"}", fontWeight = FontWeight.Bold, color = Wrangler.Dark) },
+                title = { Text("Bottle · ${name ?: "Turtle"}", fontWeight = FontWeight.Bold, color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to dashboard",
-                            tint = Wrangler.Dark)
+                            tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Wrangler.Surface),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Wrangler.Primary),
             )
         },
         containerColor = Wrangler.Background,

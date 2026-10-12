@@ -25,6 +25,9 @@ import java.util.UUID
 private const val TAG = "TurtleConnection"
 private const val PREFERRED_MTU = 185
 
+/** Waits before each reconnect try after an unexpected drop; then give up. */
+private val RECONNECT_BACKOFF_MS = longArrayOf(1_000, 2_000, 4_000, 8_000, 16_000)
+
 /** Where the link is. The UI shows these words; keep them plain. */
 sealed interface LinkState {
     data object Connecting : LinkState
@@ -33,6 +36,8 @@ sealed interface LinkState {
     /** [readOnly]: the turtle speaks a newer contract than this app — show
      *  data from the v1 prefix of each value, but send no commands. */
     data class Ready(val readOnly: Boolean) : LinkState
+    /** The link dropped unexpectedly; waiting [waitMs] before try [attempt] of [of]. */
+    data class Reconnecting(val attempt: Int, val of: Int, val waitMs: Long, val reason: String?) : LinkState
     data class Disconnected(val reason: String?) : LinkState
 }
 
@@ -107,8 +112,10 @@ enum class HandshakeStep(val label: String) {
  * Setup progress for the connecting drawer. Steps before [step] are done
  * and [found] says what each one learned; [now] is what [step] is doing.
  * [failed] is why setup stopped, set only when it stops before Ready.
+ * [retry] is the reconnect try this setup belongs to; 0 on first connect.
  */
 data class Handshake(
+    val retry: Int = 0,
     val step: HandshakeStep = HandshakeStep.LINK,
     val now: String? = null,
     val found: Map<HandshakeStep, String> = emptyMap(),
@@ -183,10 +190,43 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
     private var pendingWrite: CompletableDeferred<Boolean>? = null
     private var pendingDescWrite: CompletableDeferred<Boolean>? = null
 
+    // Auto-reconnect: after the link drops unexpectedly, try again with
+    // backoff. Not after disconnect() or a command that ends the link on
+    // purpose (expectEnd), and not when setup itself refused the turtle.
+    @Volatile private var userClosed = false
+    @Volatile private var endExpected = false
+    private var reconnectAttempt = 0          // 0 = not reconnecting
+
     fun connect() {
         _state.value = LinkState.Connecting
         _handshake.value = Handshake(now = "Connecting to ${device.address}")
         gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
+    }
+
+    /** The next drop is on purpose (Sleep, Bluetooth off, airOS): don't
+     *  reconnect. [expected] false undoes it when the command failed. */
+    fun expectEnd(expected: Boolean = true) {
+        endExpected = expected
+    }
+
+    private fun scheduleReconnect(reason: String?) {
+        reconnectAttempt += 1
+        val wait = RECONNECT_BACKOFF_MS[reconnectAttempt - 1]
+        val of = RECONNECT_BACKOFF_MS.size
+        Log.i(TAG, "link lost (${reason ?: "closed"}) — reconnect $reconnectAttempt of $of in ${wait}ms")
+        try { gatt?.close() } catch (_: Exception) {}
+        gatt = null
+        _state.value = LinkState.Reconnecting(reconnectAttempt, of, wait, reason)
+        _handshake.value = Handshake(retry = reconnectAttempt, now = (reason ?: "The turtle closed the connection") +
+            ". Try $reconnectAttempt of $of in ${wait / 1000} s")
+        scope.launch {
+            kotlinx.coroutines.delay(wait)
+            if (userClosed) return@launch
+            _state.value = LinkState.Connecting
+            _handshake.value = Handshake(retry = reconnectAttempt,
+                now = "Reconnecting to ${device.address}, try $reconnectAttempt of $of")
+            gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
+        }
     }
 
     private fun retrySetup(status: Int) {
@@ -197,7 +237,7 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
         _state.value = LinkState.Connecting
         // Keep the first failure on screen: the step it hit and the status.
         val during = _handshake.value.step.label
-        _handshake.value = Handshake(
+        _handshake.value = Handshake(retry = reconnectAttempt,
             now = "Link dropped during \"$during\" (${gattStatusName(status)}); trying again")
         scope.launch {
             kotlinx.coroutines.delay(600)
@@ -206,10 +246,12 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
     }
 
     fun disconnect() {
+        userClosed = true
         gatt?.disconnect()
     }
 
     fun close() {
+        userClosed = true
         try { gatt?.close() } catch (_: Exception) {}
         gatt = null
         failPending()
@@ -304,9 +346,17 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
         val g = gatt ?: return
         found(HandshakeStep.LINK, if (setupRetries > 0) "Connected on the second try" else "Connected")
         begin(HandshakeStep.MTU, "Asking for $PREFERRED_MTU-byte packets")
-        queue.run<Int> { done -> pendingMtu = done; g.requestMtu(PREFERRED_MTU) }
+        var mtuStarted = false
+        val mtuReply = queue.run<Int> { done -> pendingMtu = done; g.requestMtu(PREFERRED_MTU).also { mtuStarted = it } }
         if (!linkUp) return
-        found(HandshakeStep.MTU, "MTU $mtu, up to ${mtu - 3} bytes a value")
+        // No reply means the turtle isn't answering at all: say so rather
+        // than report the default as if it were negotiated.
+        val mtuSilent = mtuReply == null
+        found(HandshakeStep.MTU, when {
+            !mtuStarted -> "Android refused to ask (requestMtu returned false); using MTU $mtu"
+            mtuSilent -> "No reply within 5 s; using MTU $mtu"
+            else -> "MTU $mtu, up to ${mtu - 3} bytes a value"
+        })
 
         begin(HandshakeStep.SERVICES, "Discovering services")
         var ok = queue.run<Boolean> { done -> pendingDiscover = done; g.discoverServices() } ?: false
@@ -348,7 +398,9 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
         if (!linkUp) return
         val raw = (contractRead as? Read.Ok)?.value
         if (raw == null) {
-            fail("Couldn't read Contract Info: ${contractRead.describe()}")
+            fail("Couldn't read Contract Info: ${contractRead.describe()}" +
+                if (mtuSilent && contractRead is Read.Timeout)
+                    ". The turtle answered nothing since connecting; turtleOS may be frozen" else "")
             return
         }
         val info = TurtleCodec.contractInfo(raw)
@@ -379,6 +431,7 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
         if (!linkUp) return
         found(HandshakeStep.SUBSCRIBE, "$on notifications on" + if (readOnly) ", no commands" else "")
         setupRetries = 0
+        reconnectAttempt = 0
         _state.value = LinkState.Ready(readOnly)
         Log.i(TAG, "ready: ${name} contract v${info.contractVersion} mtu=$mtu readOnly=$readOnly")
     }
@@ -462,8 +515,18 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
                 if (prior !is LinkState.Disconnected) {
                     val reason = if (status == BluetoothGatt.GATT_SUCCESS) null
                         else "Link lost: ${gattStatusName(status)}"
-                    if (inSetup) _handshake.update { it.copy(failed = reason ?: "The turtle closed the connection") }
-                    _state.value = LinkState.Disconnected(reason)
+                    // A drop from Ready, or a failed reconnect try, tries again
+                    // unless it was meant (fail() has already set Disconnected).
+                    val unexpected = !userClosed && !endExpected && (prior is LinkState.Ready || reconnectAttempt > 0)
+                    if (unexpected && reconnectAttempt < RECONNECT_BACKOFF_MS.size) {
+                        scheduleReconnect(reason)
+                        return
+                    }
+                    val gaveUp = unexpected && reconnectAttempt > 0
+                    val why = (reason ?: "The turtle closed the connection") +
+                        if (gaveUp) ". Gave up after $reconnectAttempt tries" else ""
+                    if (inSetup) _handshake.update { it.copy(failed = why) }
+                    _state.value = LinkState.Disconnected(if (gaveUp) why else reason)
                 }
             }
         }

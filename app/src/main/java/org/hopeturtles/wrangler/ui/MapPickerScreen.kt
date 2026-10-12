@@ -131,14 +131,14 @@ fun MapPickerScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Pick destination", fontWeight = FontWeight.Bold, color = Wrangler.Dark) },
+                title = { Text("Pick destination", fontWeight = FontWeight.Bold, color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to Navigate",
-                            tint = Wrangler.Dark)
+                            tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Wrangler.Surface),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Wrangler.Primary),
             )
         },
         containerColor = Wrangler.Background,

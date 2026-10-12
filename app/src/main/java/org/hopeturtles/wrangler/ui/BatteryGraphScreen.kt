@@ -27,6 +27,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
@@ -66,14 +67,14 @@ fun BatteryGraphScreen(name: String?, samples: List<BattSample>, live: Boolean, 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Battery · ${name ?: "Turtle"}", fontWeight = FontWeight.Bold, color = Wrangler.Dark) },
+                title = { Text("Battery · ${name ?: "Turtle"}", fontWeight = FontWeight.Bold, color = Color.White) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back to dashboard",
-                            tint = Wrangler.Dark)
+                            tint = Color.White)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Wrangler.Surface),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Wrangler.Primary),
             )
         },
         containerColor = Wrangler.Background,

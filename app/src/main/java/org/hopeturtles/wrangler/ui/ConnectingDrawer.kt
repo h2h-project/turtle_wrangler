@@ -18,12 +18,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -37,24 +39,21 @@ import org.hopeturtles.wrangler.ui.theme.Wrangler
 private const val DONE_HOLD_MS = 700L
 
 /**
- * White drawer under the top bar, so it reads as part of it, that slides down
+ * Green drawer under the top bar, white on green so it reads as part of it, that slides down
  * while the link is set up and lists every handshake step as it happens. It
  * slides back up once the turtle is Ready. If setup fails it stays down and
  * says which step stopped and why; the top bar's "Scan" is the way back.
+ * After an unexpected drop it comes back down while the link reconnects,
+ * with "Stop" ([onStop]) to give up and go back to scanning.
  */
 @Composable
-fun ConnectingDrawer(state: LinkState, hs: Handshake, modifier: Modifier = Modifier) {
-    val inSetup = state is LinkState.Connecting || state is LinkState.Preparing
+fun ConnectingDrawer(
+    state: LinkState, hs: Handshake, shown: MutableTransitionState<Boolean>, onStop: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    // Set while a reconnect cycle runs (waiting or setting up again).
+    val reconnecting = hs.retry > 0
     val failed = state is LinkState.Disconnected && hs.failed != null
-    // Starts up so the first frame slides it down rather than appearing.
-    val shown = remember { MutableTransitionState(false) }
-    LaunchedEffect(inSetup, failed) {
-        if (inSetup || failed) shown.targetState = true
-        else {
-            delay(DONE_HOLD_MS)
-            shown.targetState = false
-        }
-    }
     AnimatedVisibility(
         visibleState = shown,
         enter = expandVertically(expandFrom = Alignment.Top) + fadeIn(),
@@ -62,7 +61,7 @@ fun ConnectingDrawer(state: LinkState, hs: Handshake, modifier: Modifier = Modif
         modifier = modifier,
     ) {
         Surface(
-            color = Wrangler.Surface,
+            color = Wrangler.Primary,
             shape = RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp),
             shadowElevation = 3.dp,
             modifier = Modifier.fillMaxWidth(),
@@ -73,14 +72,22 @@ fun ConnectingDrawer(state: LinkState, hs: Handshake, modifier: Modifier = Modif
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 val ready = state is LinkState.Ready
-                Text(
-                    when {
-                        ready -> "Connected"
-                        failed -> "Couldn't connect"
-                        else -> "Connecting…"
-                    },
-                    fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 16.sp,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        when {
+                            ready -> "Connected"
+                            failed -> "Couldn't connect"
+                            state is LinkState.Reconnecting -> "Link lost"
+                            reconnecting -> "Reconnecting… (try ${hs.retry})"
+                            else -> "Connecting…"
+                        },
+                        fontWeight = FontWeight.Bold, color = Color.White, fontSize = 16.sp,
+                        modifier = Modifier.weight(1f),
+                    )
+                    if (reconnecting && !ready && !failed) TextButton(onClick = onStop) {
+                        Text("Stop", color = Color.White, fontWeight = FontWeight.Bold)
+                    }
+                }
                 HandshakeStep.entries.forEach { step ->
                     val done = ready || step.ordinal < hs.step.ordinal
                     val current = !ready && step == hs.step
@@ -105,6 +112,29 @@ fun ConnectingDrawer(state: LinkState, hs: Handshake, modifier: Modifier = Modif
     }
 }
 
+/** Steps still to come, dimmed on the green. */
+private val Faint = Color.White.copy(alpha = 0.5f)
+
+/**
+ * Whether the connecting drawer is down, hoisted so the top bar can hide its
+ * sections handle meanwhile. Starts up, so the first frame slides it down.
+ */
+@Composable
+fun rememberConnectingDrawer(state: LinkState, hs: Handshake): MutableTransitionState<Boolean> {
+    val inSetup = state is LinkState.Connecting || state is LinkState.Preparing ||
+        state is LinkState.Reconnecting
+    val failed = state is LinkState.Disconnected && hs.failed != null
+    val shown = remember { MutableTransitionState(false) }
+    LaunchedEffect(inSetup, failed) {
+        if (inSetup || failed) shown.targetState = true
+        else {
+            delay(DONE_HOLD_MS)
+            shown.targetState = false
+        }
+    }
+    return shown
+}
+
 private enum class StepMark { DONE, WORKING, FAILED, TODO }
 
 @Composable
@@ -113,14 +143,10 @@ private fun StepRow(label: String, mark: StepMark, detail: String?) {
         Box(Modifier.width(26.dp).padding(top = 2.dp)) {
             when (mark) {
                 StepMark.WORKING -> CircularProgressIndicator(
-                    Modifier.size(14.dp), color = Wrangler.Primary, strokeWidth = 2.dp)
+                    Modifier.size(14.dp), color = Color.White, strokeWidth = 2.dp)
                 else -> Text(
                     when (mark) { StepMark.DONE -> "✓"; StepMark.FAILED -> "✕"; else -> "○" },
-                    color = when (mark) {
-                        StepMark.DONE -> Wrangler.Primary
-                        StepMark.FAILED -> Wrangler.Dark
-                        else -> Wrangler.TextMuted
-                    },
+                    color = if (mark == StepMark.TODO) Faint else Color.White,
                     fontSize = 14.sp, fontWeight = FontWeight.Bold,
                 )
             }
@@ -128,10 +154,10 @@ private fun StepRow(label: String, mark: StepMark, detail: String?) {
         Column {
             Text(
                 label, fontSize = 14.sp,
-                color = if (mark == StepMark.TODO) Wrangler.TextMuted else Wrangler.Text,
+                color = if (mark == StepMark.TODO) Faint else Color.White,
                 fontWeight = if (mark == StepMark.WORKING || mark == StepMark.FAILED) FontWeight.Bold else FontWeight.Normal,
             )
-            if (detail != null) Muted(detail)
+            if (detail != null) Text(detail, color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp)
         }
     }
 }

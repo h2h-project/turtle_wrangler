@@ -1,6 +1,7 @@
 package org.hopeturtles.wrangler.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -71,8 +72,9 @@ fun SettingsScreen(
     }
     LaunchedEffect(canCommand) { if (canCommand) readSsid() }
 
+    // White cards on the landing screen's green, like the top bar.
     Column(
-        Modifier.fillMaxSize().padding(16.dp).verticalScroll(rememberScrollState()),
+        Modifier.fillMaxSize().background(Wrangler.Primary).padding(16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         NoticeCard(notice, busy)

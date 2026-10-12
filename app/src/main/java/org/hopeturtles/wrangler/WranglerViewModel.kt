@@ -197,8 +197,8 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
     fun pair() {
         val dev = _connection.value?.device ?: return
         _notice.value = Notice(
-            "On the turtle: triple-click, then single-click three times to open its " +
-                "Bluetooth screen. Enter the 6-digit code it shows.", true)
+            "On the turtle: triple-click to open its Bluetooth screen. " +
+                "Enter the 6-digit code it shows.", true)
         val started = dev.createBond()
         Log.i("Wrangler", "createBond -> $started (bondState ${dev.bondState})")
     }
@@ -241,9 +241,17 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
         val c = client ?: return
         if (_busy.value != null) return
         _busy.value = label                      // before launch: a double-tap can't send twice
+        // Commands that end the link on purpose: don't auto-reconnect after them.
+        // Reboot isn't one, since the turtle comes back.
+        val off = payload.firstOrNull() == 0.toByte()
+        val ends = opcode == Op.SLEEP || (opcode == Op.BLE_SET_ENABLED && off) ||
+            (opcode == Op.SET_TURTLE_MODE && off)
+        val link = _connection.value
+        if (ends) link?.expectEnd()
         viewModelScope.launch {
             if (!quiet) _notice.value = Notice("$label…", true)
             val r = try { c.send(opcode, payload) } finally { _busy.value = null }
+            if (ends && !r.code.ok && link?.state?.value is LinkState.Ready) link.expectEnd(false)
             if (!quiet || r.code == ResultCode.NOT_BONDED) _notice.value = Notice("$label: ${r.message}", r.code.ok)
             if (r.code == ResultCode.NOT_BONDED) pair()
             onResult(r)

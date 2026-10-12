@@ -28,6 +28,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -37,6 +38,8 @@ import org.hopeturtles.wrangler.ui.theme.Wrangler
 
 /**
  * Top bar on every screen: title, link status, settings gear top-right.
+ * White on the landing screen's green, so the app's top-level chrome reads
+ * as one with the splash and scan screens.
  * With [onStatusClick] the status becomes a button (e.g. "Disconnected · Scan").
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -46,53 +49,70 @@ fun WranglerTopBar(
     onStatusClick: (() -> Unit)? = null, statusAction: String = "Scan",
     connected: Boolean? = null,
     settingsOpen: Boolean = false,
+    subtitle: String? = null,
 ) {
+    // With a [subtitle] (a turtle's section), the name and section sit on the
+    // right beside the gear, and the link status moves left beside the logo.
+    val titleEnd = subtitle != null
+    @Composable
+    fun Status() {
+        if (status != null && onStatusClick != null) {
+            OutlinedButton(
+                onClick = onStatusClick,
+                border = BorderStroke(1.dp, Color.White),
+                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
+                modifier = Modifier.height(34.dp),
+            ) {
+                Text("○ $status · $statusAction", color = Color.White, fontSize = 13.sp,
+                    fontWeight = FontWeight.Bold)
+            }
+        } else if (status != null) {
+            Text(
+                (if (statusOk) "● " else "○ ") + status,
+                color = if (statusOk) Color.White else Color.White.copy(alpha = 0.7f),
+                fontSize = 13.sp, fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.width(4.dp))
+        }
+    }
     TopAppBar(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // The app icon's smiling ASCII turtle: green = connected, grey = not.
+                // The app icon's smiling ASCII turtle, inverted to white on the green
+                // bar: solid = connected, faded = not.
                 // The art fills the middle half of its 108-unit canvas, hence 66 dp
                 // for a turtle about 33 dp wide; the offsets trim the empty margin.
                 if (connected != null) Icon(
                     painterResource(R.drawable.ic_launcher_foreground),
                     contentDescription = if (connected) "Connected" else "Not connected",
-                    tint = if (connected) Wrangler.Primary else Wrangler.TextMuted,
+                    tint = if (connected) Color.White else Color.White.copy(alpha = 0.45f),
                     modifier = Modifier.size(66.dp).offset(x = (-14).dp),
                 )
-                Text(title, fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 18.sp,
-                    modifier = Modifier.offset(x = if (connected != null) (-24).dp else 0.dp))
+                Row(Modifier.offset(x = if (connected != null) (-24).dp else 0.dp),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    if (titleEnd) Status()
+                    else Text(title, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 18.sp)
+                }
             }
         },
         actions = {
-            if (status != null && onStatusClick != null) {
-                OutlinedButton(
-                    onClick = onStatusClick,
-                    border = BorderStroke(1.dp, Wrangler.Primary),
-                    contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 12.dp),
-                    modifier = Modifier.height(34.dp),
-                ) {
-                    Text("○ $status · $statusAction", color = Wrangler.Primary, fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold)
+            if (titleEnd) {
+                Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 8.dp)) {
+                    Text(title, fontWeight = FontWeight.Bold, color = Color.White, fontSize = 17.sp, maxLines = 1)
+                    Text(subtitle!!, color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp, maxLines = 1)
                 }
-            } else if (status != null) {
-                Text(
-                    (if (statusOk) "● " else "○ ") + status,
-                    color = if (statusOk) Wrangler.Primary else Wrangler.TextMuted,
-                    fontSize = 13.sp, fontWeight = FontWeight.Bold,
-                )
-                Spacer(Modifier.width(4.dp))
-            }
+            } else Status()
             // Highlighted while Settings is open (it's not a tab, so no tab is).
             IconButton(
                 onClick = onSettings,
-                colors = if (settingsOpen) IconButtonDefaults.iconButtonColors(containerColor = Wrangler.Light)
+                colors = if (settingsOpen) IconButtonDefaults.iconButtonColors(containerColor = Color.White.copy(alpha = 0.2f))
                     else IconButtonDefaults.iconButtonColors(),
             ) {
                 Icon(Icons.Filled.Settings, contentDescription = if (settingsOpen) "Close settings" else "Settings",
-                    tint = if (settingsOpen) Wrangler.Primary else Wrangler.Dark)
+                    tint = Color.White)
             }
         },
-        colors = TopAppBarDefaults.topAppBarColors(containerColor = Wrangler.Surface),
+        colors = TopAppBarDefaults.topAppBarColors(containerColor = Wrangler.Primary),
     )
 }
 
