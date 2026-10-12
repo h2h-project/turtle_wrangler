@@ -36,6 +36,63 @@ sealed interface LinkState {
     data class Disconnected(val reason: String?) : LinkState
 }
 
+/** What a GATT read callback delivered; [LINK_DROPPED] when the link went first. */
+private class ReadReply(val status: Int, val value: ByteArray?)
+private const val LINK_DROPPED = -1
+
+/** How one read went, in words precise enough to debug from the drawer. */
+private sealed interface Read {
+    class Ok(val value: ByteArray) : Read
+    class Missing(val what: String) : Read
+    data object Refused : Read
+    data object Timeout : Read
+    data object NoLink : Read
+    class Status(val code: Int) : Read
+
+    fun describe(): String = when (this) {
+        is Ok -> "${value.size} byte(s) [${hex(value)}]"
+        is Missing -> what
+        Refused -> "Android refused to start the read (readCharacteristic returned false)"
+        Timeout -> "no reply within 5 s"
+        NoLink -> "the link dropped before the reply"
+        is Status -> gattStatusName(code)
+    }
+}
+
+private fun hex(b: ByteArray) = b.joinToString(" ") { "%02x".format(it) }
+
+/** "0101" for a contract UUID, the full UUID otherwise. */
+private fun shortId(u: UUID): String {
+    val s = u.toString()
+    return if (s.endsWith("-5890-45f2-b0be-090d35436a95") && s.startsWith("26d0")) s.substring(4, 8) else s
+}
+
+/** GATT status with its name, e.g. "GATT status 5 (insufficient authentication)". */
+internal fun gattStatusName(code: Int): String {
+    val name = when (code) {
+        2 -> "read not permitted"
+        3 -> "write not permitted"
+        5 -> "insufficient authentication"
+        6 -> "request not supported"
+        7 -> "invalid offset"
+        8 -> "insufficient authorization, or connection timeout"
+        13 -> "invalid attribute length"
+        15 -> "insufficient encryption"
+        19 -> "remote device ended the connection"
+        22 -> "terminated by local host"
+        34 -> "LMP response timeout"
+        62 -> "failed to establish connection"
+        128 -> "no resources"
+        129 -> "internal error"
+        133 -> "GATT_ERROR, generic Android failure"
+        137 -> "authentication failed"
+        143 -> "connection congested"
+        257 -> "failure"
+        else -> null
+    }
+    return "GATT status $code" + (name?.let { " ($it)" } ?: "")
+}
+
 /** The setup handshake, in order. The connecting drawer lists all of them. */
 enum class HandshakeStep(val label: String) {
     LINK("Bluetooth link"),
@@ -122,7 +179,7 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
     // operation is in flight, so these never overlap.
     private var pendingMtu: CompletableDeferred<Int>? = null
     private var pendingDiscover: CompletableDeferred<Boolean>? = null
-    private var pendingRead: CompletableDeferred<ByteArray?>? = null
+    private var pendingRead: CompletableDeferred<ReadReply>? = null
     private var pendingWrite: CompletableDeferred<Boolean>? = null
     private var pendingDescWrite: CompletableDeferred<Boolean>? = null
 
@@ -132,13 +189,16 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
         gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
     }
 
-    private fun retrySetup() {
+    private fun retrySetup(status: Int) {
         setupRetries += 1
         Log.i(TAG, "link dropped during setup — retrying ($setupRetries)")
         try { gatt?.close() } catch (_: Exception) {}
         gatt = null
         _state.value = LinkState.Connecting
-        _handshake.value = Handshake(now = "Android dropped the first link; trying again")
+        // Keep the first failure on screen: the step it hit and the status.
+        val during = _handshake.value.step.label
+        _handshake.value = Handshake(
+            now = "Link dropped during \"$during\" (${gattStatusName(status)}); trying again")
         scope.launch {
             kotlinx.coroutines.delay(600)
             gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
@@ -161,12 +221,28 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
     private fun char(service: UUID, uuid: UUID): BluetoothGattCharacteristic? =
         gatt?.getService(service)?.getCharacteristic(uuid)
 
-    suspend fun read(service: UUID, uuid: UUID): ByteArray? {
-        val ch = char(service, uuid) ?: return null
-        val g = gatt ?: return null
-        return queue.run<ByteArray?> { done ->
+    suspend fun read(service: UUID, uuid: UUID): ByteArray? = (readDetailed(service, uuid) as? Read.Ok)?.value
+
+    /** A read that says exactly how it went, for the setup drawer. */
+    private suspend fun readDetailed(service: UUID, uuid: UUID): Read {
+        val g = gatt ?: return Read.NoLink
+        val svc = g.getService(service) ?: return Read.Missing("service ${shortId(service)} not in the GATT table")
+        val ch = svc.getCharacteristic(uuid) ?: return Read.Missing(
+            "${shortId(uuid)} not in the GATT table; service ${shortId(service)} has " +
+                svc.characteristics.joinToString(" ") { shortId(it.uuid) }.ifEmpty { "nothing" })
+        if (ch.properties and BluetoothGattCharacteristic.PROPERTY_READ == 0)
+            return Read.Missing("${shortId(uuid)} is not readable (properties 0x%02x)".format(ch.properties))
+        var started = false
+        val reply = queue.run<ReadReply> { done ->
             pendingRead = done
-            g.readCharacteristic(ch)
+            g.readCharacteristic(ch).also { started = it }
+        }
+        return when {
+            !started -> Read.Refused
+            reply == null -> Read.Timeout
+            reply.status == LINK_DROPPED -> Read.NoLink
+            reply.status != BluetoothGatt.GATT_SUCCESS -> Read.Status(reply.status)
+            else -> Read.Ok(reply.value ?: ByteArray(0))
         }
     }
 
@@ -266,17 +342,24 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
         found(HandshakeStep.SERVICES, "${g.services.size} services, $have of ${TurtleUuids.TELEMETRY.size} telemetry values" +
             if (refreshed) " (cache refreshed)" else "")
 
-        begin(HandshakeStep.CONTRACT, "Reading the contract version")
-        val info = read(TurtleUuids.TURTLE_SERVICE, TurtleUuids.CONTRACT_INFO)?.let(TurtleCodec::contractInfo)
+        begin(HandshakeStep.CONTRACT, "Reading Contract Info (${shortId(TurtleUuids.CONTRACT_INFO)})")
+        val contractRead = readDetailed(TurtleUuids.TURTLE_SERVICE, TurtleUuids.CONTRACT_INFO)
+        Log.i(TAG, "contract read: ${contractRead.describe()}")
         if (!linkUp) return
+        val raw = (contractRead as? Read.Ok)?.value
+        if (raw == null) {
+            fail("Couldn't read Contract Info: ${contractRead.describe()}")
+            return
+        }
+        val info = TurtleCodec.contractInfo(raw)
         if (info == null) {
-            fail("Couldn't read the contract version")
+            fail("Contract Info too short: got ${raw.size} byte(s) [${hex(raw)}], need at least 2")
             return
         }
         val readOnly = info.contractVersion > TurtleUuids.CONTRACT_VERSION
         val name = read(TurtleUuids.TURTLE_SERVICE, TurtleUuids.TURTLE_NAME)?.let(TurtleCodec::turtleName)
         _telemetry.update { it.copy(contract = info, name = name) }
-        found(HandshakeStep.CONTRACT, "v${info.contractVersion}" + (name?.let { ", $it" } ?: "") +
+        found(HandshakeStep.CONTRACT, "v${info.contractVersion}, mode ${info.turtleMode} [${hex(raw)}]" + (name?.let { ", $it" } ?: "") +
             if (readOnly) " (newer than this app's v${TurtleUuids.CONTRACT_VERSION}: read-only)" else "")
 
         begin(HandshakeStep.READ, "Device information")
@@ -351,7 +434,7 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
     private fun failPending() {
         pendingMtu?.complete(mtu)
         pendingDiscover?.complete(false)
-        pendingRead?.complete(null)
+        pendingRead?.complete(ReadReply(LINK_DROPPED, null))
         pendingWrite?.complete(false)
         pendingDescWrite?.complete(false)
     }
@@ -373,11 +456,12 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
                 val prior = _state.value
                 val inSetup = prior is LinkState.Connecting || prior is LinkState.Preparing
                 if (inSetup && status != BluetoothGatt.GATT_SUCCESS && setupRetries < 1) {
-                    retrySetup()
+                    retrySetup(status)
                     return
                 }
                 if (prior !is LinkState.Disconnected) {
-                    val reason = if (status == BluetoothGatt.GATT_SUCCESS) null else "Link lost (status $status)"
+                    val reason = if (status == BluetoothGatt.GATT_SUCCESS) null
+                        else "Link lost: ${gattStatusName(status)}"
                     if (inSetup) _handshake.update { it.copy(failed = reason ?: "The turtle closed the connection") }
                     _state.value = LinkState.Disconnected(reason)
                 }
@@ -397,14 +481,14 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
         override fun onCharacteristicRead(
             g: BluetoothGatt, ch: BluetoothGattCharacteristic, value: ByteArray, status: Int,
         ) {
-            pendingRead?.complete(if (status == BluetoothGatt.GATT_SUCCESS) value else null)
+            pendingRead?.complete(ReadReply(status, value))
         }
 
         @Deprecated("API < 33")
         override fun onCharacteristicRead(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {
             if (modern) return
             @Suppress("DEPRECATION")
-            pendingRead?.complete(if (status == BluetoothGatt.GATT_SUCCESS) ch.value else null)
+            pendingRead?.complete(ReadReply(status, ch.value))
         }
 
         override fun onCharacteristicWrite(g: BluetoothGatt, ch: BluetoothGattCharacteristic, status: Int) {

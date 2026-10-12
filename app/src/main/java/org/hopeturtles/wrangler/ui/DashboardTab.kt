@@ -27,7 +27,10 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
@@ -145,32 +148,32 @@ private fun Tile(label: String, value: String?, modifier: Modifier, extra: @Comp
 }
 
 /**
- * Big heading over a full-width compass dial: a heavy ring with fine ticks
- * round the outside (2°, longer every 10° and 30°), a green needle for the
- * heading, and a triangle on the ring pointing in at the target bearing.
- * The triangle is the screen's pink element (outline over tint, never
- * solid) unless SAFE has taken that slot, when it goes dark green.
+ * Full-width compass dial with the heading and target line underneath: a
+ * heavy ring with fine ticks round the outside (2°, longer every 10° and
+ * 30°), a green needle for the heading, a grey bar through the centre for
+ * the sail, and a triangle on the ring pointing in at the target bearing.
+ * The triangle is pink (outline over tint, never solid) unless SAFE has
+ * taken the pink slot, when it goes dark green.
  */
 @Composable
 private fun HeadingCard(tel: TurtleTelemetry, pinkSlot: Boolean) {
     val heading = tel.nav?.headingDeg
     val bearing = tel.nav?.bearingToTargetDeg
+    val sail = tel.sail?.sailDeg
     val labels = rememberTextMeasurer()
     WCard {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Column(Modifier.weight(1f)) {
-                Text(Format.heading(heading) ?: "—", fontSize = 34.sp,
-                    fontWeight = FontWeight.Bold, color = Wrangler.Dark)
-                Muted(bearing?.let { "target is ${Format.degrees(it)} · " +
-                    (Format.turnText(Format.turn(heading, it)) ?: "") } ?: "no target bearing")
-            }
+        Row {
+            Spacer(Modifier.weight(1f))
             Text(
-                "● live", color = Wrangler.Primary, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                buildAnnotatedString {
+                    withStyle(SpanStyle(color = Wrangler.PinkDark)) { append("● ") }
+                    append("live")
+                },
+                color = Wrangler.Primary, fontSize = 12.sp, fontWeight = FontWeight.Bold,
                 modifier = Modifier.background(Wrangler.Background, RoundedCornerShape(50))
                     .padding(horizontal = 10.dp, vertical = 2.dp),
             )
         }
-        Spacer(Modifier.height(8.dp))
         Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
             val c = Offset(size.width / 2f, size.height / 2f)
             val ringW = 10.dp.toPx()
@@ -203,6 +206,15 @@ private fun HeadingCard(tel: TurtleTelemetry, pinkSlot: Boolean) {
                 drawText(m, topLeft = Offset(p.x - m.size.width / 2f, p.y - m.size.height / 2f))
             }
 
+            // Sail: a grey bar straddling the centre, at heading + sail angle.
+            // Assumes encoder 0° is the sail along the hull (the contract
+            // gives the AS5600 angle relative to the boat, zero unstated).
+            if (heading != null && sail != null) {
+                val len = r * 0.62f
+                drawLine(Wrangler.TextMuted.copy(alpha = 0.75f), at(heading + sail, len),
+                    at(heading + sail + 180.0, len), 6.dp.toPx(), cap = StrokeCap.Round)
+            }
+
             heading?.let {
                 drawLine(Wrangler.Primary, c, at(it, r - ringW / 2f - 30.dp.toPx()), 7.dp.toPx(),
                     cap = StrokeCap.Round)
@@ -231,6 +243,12 @@ private fun HeadingCard(tel: TurtleTelemetry, pinkSlot: Boolean) {
                     drawPath(tri, Wrangler.Dark, style = Stroke(2.5.dp.toPx(), join = StrokeJoin.Round))
                 }
             }
+        }
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(Format.heading(heading) ?: "—", fontSize = 24.sp,
+                fontWeight = FontWeight.Bold, color = Wrangler.Dark)
+            Muted(bearing?.let { "target is ${Format.degrees(it)} · " +
+                (Format.turnText(Format.turn(heading, it)) ?: "") } ?: "no target bearing")
         }
     }
 }

@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -66,7 +67,8 @@ fun ConnectingDrawer(state: LinkState, hs: Handshake, modifier: Modifier = Modif
             shadowElevation = 3.dp,
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(
+            // Selectable, so an error can be long-pressed and copied.
+            SelectionContainer { Column(
                 Modifier.padding(start = 20.dp, end = 20.dp, top = 4.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
@@ -98,7 +100,7 @@ fun ConnectingDrawer(state: LinkState, hs: Handshake, modifier: Modifier = Modif
                         },
                     )
                 }
-            }
+            } }
         }
     }
 }
