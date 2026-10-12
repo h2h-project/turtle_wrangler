@@ -1,7 +1,7 @@
 package org.hopeturtles.wrangler.ui
 
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -9,7 +9,6 @@ import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Send
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -17,13 +16,13 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import org.hopeturtles.wrangler.BattSample
 import org.hopeturtles.wrangler.EnvSample
 import org.hopeturtles.wrangler.Notice
+import org.hopeturtles.wrangler.ble.Handshake
 import org.hopeturtles.wrangler.ble.LinkState
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
 import org.hopeturtles.wrangler.data.StampEntry
@@ -40,6 +39,7 @@ enum class Tab(val label: String, val icon: ImageVector) {
 @Composable
 fun TurtleHome(
     state: LinkState,
+    handshake: Handshake,
     tel: TurtleTelemetry,
     live: Boolean,
     battHistory: List<BattSample>,
@@ -61,28 +61,32 @@ fun TurtleHome(
     onSecureMode: (Boolean) -> Unit,
     onPair: () -> Unit,
     onDisconnect: () -> Unit,
-    onSettings: () -> Unit,
+    settingsOpen: Boolean,
+    onSettings: (Boolean) -> Unit,
+    quietRun: RunCommand,
 ) {
-    // The turtle logo's colour says connected; text only for the other states.
+    // Settings sits over the tabs: back, or any tab, closes it.
+    BackHandler(enabled = settingsOpen) { onSettings(false) }
+    // The turtle logo's colour says connected. Setup progress lives in the
+    // connecting drawer, not here; text only for read-only and disconnected.
     val (statusText, ok) = when (state) {
-        is LinkState.Connecting -> "Connecting" to false
-        is LinkState.Preparing -> state.step to false
+        is LinkState.Connecting, is LinkState.Preparing -> null to false
         is LinkState.Ready -> (if (state.readOnly) "Read-only" else null) to true
         is LinkState.Disconnected -> "Disconnected" to false
     }
     Scaffold(
         topBar = {
             // Once the link has dropped, the status is the way back: tap to scan again.
-            WranglerTopBar(tel.name ?: "Turtle", statusText, ok, onSettings,
+            WranglerTopBar(tel.name ?: "Turtle", statusText, ok, onSettings = { onSettings(!settingsOpen) },
                 onStatusClick = if (state is LinkState.Disconnected) onDisconnect else null,
-                connected = state is LinkState.Ready)
+                connected = state is LinkState.Ready, settingsOpen = settingsOpen)
         },
         bottomBar = {
             NavigationBar(containerColor = Wrangler.Surface) {
                 Tab.entries.forEach { t ->
                     NavigationBarItem(
-                        selected = t == tab,
-                        onClick = { onTab(t) },
+                        selected = !settingsOpen && t == tab,
+                        onClick = { onSettings(false); onTab(t) },
                         icon = { Icon(t.icon, contentDescription = t.label) },
                         label = { Text(t.label) },
                         colors = NavigationBarItemDefaults.colors(
@@ -98,14 +102,9 @@ fun TurtleHome(
         },
         containerColor = Wrangler.Background,
     ) { pad ->
-        Column(Modifier.fillMaxSize().padding(pad)) {
-            if (state is LinkState.Connecting || state is LinkState.Preparing) {
-                Row(Modifier.padding(start = 16.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                    CircularProgressIndicator(Modifier.padding(end = 12.dp), color = Wrangler.Primary)
-                    Muted("$statusText…")
-                }
-            }
-            when (tab) {
+        Box(Modifier.fillMaxSize().padding(pad)) {
+            if (settingsOpen) SettingsScreen(state, tel, notice, busy, run, quietRun, say)
+            else when (tab) {
                 Tab.DASHBOARD -> DashboardTab(tel, live, battHistory, onBattery, envHistory, onBottle)
                 Tab.NAVIGATE -> NavigateTab(
                     tel, live, canCommand = state is LinkState.Ready && !state.readOnly,
@@ -122,6 +121,8 @@ fun TurtleHome(
                     onPair = onPair, onSetClock = onSetClock, onSecureMode = onSecureMode, onDisconnect = onDisconnect,
                 )
             }
+            // Over the tabs, so they don't jump when it slides away.
+            ConnectingDrawer(state, handshake, Modifier.zIndex(1f))
         }
     }
 }

@@ -29,6 +29,7 @@ object Op {
     const val WIFI_SET_CREDENTIALS = 0x31
     const val CONNECTION_MODE_SET = 0x32
     const val BLE_SET_ENABLED = 0x33
+    const val WIFI_GET_SSID = 0x34            // added 2026-10-09: OK + saved SSID (never the password)
     const val SLEEP = 0x40
     const val SET_TURTLE_MODE = 0x41
     const val REBOOT = 0x42

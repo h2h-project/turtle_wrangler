@@ -28,12 +28,35 @@ private const val PREFERRED_MTU = 185
 /** Where the link is. The UI shows these words; keep them plain. */
 sealed interface LinkState {
     data object Connecting : LinkState
-    data class Preparing(val step: String) : LinkState
+    /** Linked, and working through the setup handshake; [Handshake] says where. */
+    data object Preparing : LinkState
     /** [readOnly]: the turtle speaks a newer contract than this app — show
      *  data from the v1 prefix of each value, but send no commands. */
     data class Ready(val readOnly: Boolean) : LinkState
     data class Disconnected(val reason: String?) : LinkState
 }
+
+/** The setup handshake, in order. The connecting drawer lists all of them. */
+enum class HandshakeStep(val label: String) {
+    LINK("Bluetooth link"),
+    MTU("Packet size"),
+    SERVICES("Services"),
+    CONTRACT("Contract"),
+    READ("Reading the turtle"),
+    SUBSCRIBE("Live updates"),
+}
+
+/**
+ * Setup progress for the connecting drawer. Steps before [step] are done
+ * and [found] says what each one learned; [now] is what [step] is doing.
+ * [failed] is why setup stopped, set only when it stops before Ready.
+ */
+data class Handshake(
+    val step: HandshakeStep = HandshakeStep.LINK,
+    val now: String? = null,
+    val found: Map<HandshakeStep, String> = emptyMap(),
+    val failed: String? = null,
+)
 
 data class DeviceInfo(val manufacturer: String?, val model: String?, val firmware: String?, val serial: String?)
 
@@ -74,6 +97,9 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
     private val _state = MutableStateFlow<LinkState>(LinkState.Connecting)
     val state: StateFlow<LinkState> = _state.asStateFlow()
 
+    private val _handshake = MutableStateFlow(Handshake())
+    val handshake: StateFlow<Handshake> = _handshake.asStateFlow()
+
     private val _telemetry = MutableStateFlow(TurtleTelemetry())
     val telemetry: StateFlow<TurtleTelemetry> = _telemetry.asStateFlow()
 
@@ -102,6 +128,7 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
 
     fun connect() {
         _state.value = LinkState.Connecting
+        _handshake.value = Handshake(now = "Connecting to ${device.address}")
         gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
     }
 
@@ -110,7 +137,8 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
         Log.i(TAG, "link dropped during setup — retrying ($setupRetries)")
         try { gatt?.close() } catch (_: Exception) {}
         gatt = null
-        _state.value = LinkState.Preparing("Retrying")
+        _state.value = LinkState.Connecting
+        _handshake.value = Handshake(now = "Android dropped the first link; trying again")
         scope.launch {
             kotlinx.coroutines.delay(600)
             gatt = device.connectGatt(context, false, callback, BluetoothDevice.TRANSPORT_LE)
@@ -187,13 +215,24 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
 
     // ------------------------------------------------------------ preparation
 
+    private fun begin(step: HandshakeStep, now: String) {
+        _state.value = LinkState.Preparing
+        _handshake.update { it.copy(step = step, now = now) }
+    }
+
+    private fun found(step: HandshakeStep, what: String) {
+        _handshake.update { it.copy(found = it.found + (step to what)) }
+    }
+
     private suspend fun prepare() {
         val g = gatt ?: return
-        _state.value = LinkState.Preparing("Negotiating")
+        found(HandshakeStep.LINK, if (setupRetries > 0) "Connected on the second try" else "Connected")
+        begin(HandshakeStep.MTU, "Asking for $PREFERRED_MTU-byte packets")
         queue.run<Int> { done -> pendingMtu = done; g.requestMtu(PREFERRED_MTU) }
         if (!linkUp) return
+        found(HandshakeStep.MTU, "MTU $mtu, up to ${mtu - 3} bytes a value")
 
-        _state.value = LinkState.Preparing("Discovering services")
+        begin(HandshakeStep.SERVICES, "Discovering services")
         var ok = queue.run<Boolean> { done -> pendingDiscover = done; g.discoverServices() } ?: false
         if (!linkUp) return
         if (!ok || g.getService(TurtleUuids.TURTLE_SERVICE) == null) {
@@ -208,8 +247,10 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
         // cache (hidden BluetoothGatt.refresh(), via reflection) and
         // discover once more. Harmless when the turtle really lacks it.
         val svc = g.getService(TurtleUuids.TURTLE_SERVICE)
+        var refreshed = false
         if (TurtleUuids.TELEMETRY.any { svc.getCharacteristic(it) == null } && refreshGattCache(g)) {
-            _state.value = LinkState.Preparing("Refreshing services")
+            refreshed = true
+            _handshake.update { it.copy(now = "Some are missing; refreshing Android's cached list") }
             kotlinx.coroutines.delay(300)
             ok = queue.run<Boolean> { done -> pendingDiscover = done; g.discoverServices() } ?: false
             if (!linkUp) return
@@ -221,7 +262,11 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
                 TurtleUuids.TELEMETRY.count { g.getService(TurtleUuids.TURTLE_SERVICE).getCharacteristic(it) != null })
         }
 
-        _state.value = LinkState.Preparing("Checking contract")
+        val have = TurtleUuids.TELEMETRY.count { g.getService(TurtleUuids.TURTLE_SERVICE).getCharacteristic(it) != null }
+        found(HandshakeStep.SERVICES, "${g.services.size} services, $have of ${TurtleUuids.TELEMETRY.size} telemetry values" +
+            if (refreshed) " (cache refreshed)" else "")
+
+        begin(HandshakeStep.CONTRACT, "Reading the contract version")
         val info = read(TurtleUuids.TURTLE_SERVICE, TurtleUuids.CONTRACT_INFO)?.let(TurtleCodec::contractInfo)
         if (!linkUp) return
         if (info == null) {
@@ -231,19 +276,25 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
         val readOnly = info.contractVersion > TurtleUuids.CONTRACT_VERSION
         val name = read(TurtleUuids.TURTLE_SERVICE, TurtleUuids.TURTLE_NAME)?.let(TurtleCodec::turtleName)
         _telemetry.update { it.copy(contract = info, name = name) }
+        found(HandshakeStep.CONTRACT, "v${info.contractVersion}" + (name?.let { ", $it" } ?: "") +
+            if (readOnly) " (newer than this app's v${TurtleUuids.CONTRACT_VERSION}: read-only)" else "")
 
-        _state.value = LinkState.Preparing("Reading turtle")
+        begin(HandshakeStep.READ, "Device information")
         readDeviceInfo()
-        for (uuid in TurtleUuids.TELEMETRY) {
-            read(TurtleUuids.TURTLE_SERVICE, uuid)?.let { apply(uuid, it) }
+        var got = 0
+        TurtleUuids.TELEMETRY.forEachIndexed { i, uuid ->
+            _handshake.update { it.copy(now = "Telemetry value ${i + 1} of ${TurtleUuids.TELEMETRY.size}") }
+            read(TurtleUuids.TURTLE_SERVICE, uuid)?.let { apply(uuid, it); got++ }
         }
-
         if (!linkUp) return
-        _state.value = LinkState.Preparing("Subscribing")
-        for (uuid in TurtleUuids.TELEMETRY) enableNotify(TurtleUuids.TURTLE_SERVICE, uuid)
-        if (!readOnly) enableNotify(TurtleUuids.COMMAND_SERVICE, TurtleUuids.RESULT)
+        found(HandshakeStep.READ, (_telemetry.value.deviceInfo?.firmware?.let { "Firmware $it, " } ?: "") +
+            "$got of ${TurtleUuids.TELEMETRY.size} values read")
 
+        begin(HandshakeStep.SUBSCRIBE, "Turning on notifications")
+        var on = TurtleUuids.TELEMETRY.count { enableNotify(TurtleUuids.TURTLE_SERVICE, it) }
+        if (!readOnly && enableNotify(TurtleUuids.COMMAND_SERVICE, TurtleUuids.RESULT)) on++
         if (!linkUp) return
+        found(HandshakeStep.SUBSCRIBE, "$on notifications on" + if (readOnly) ", no commands" else "")
         setupRetries = 0
         _state.value = LinkState.Ready(readOnly)
         Log.i(TAG, "ready: ${name} contract v${info.contractVersion} mtu=$mtu readOnly=$readOnly")
@@ -292,6 +343,7 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
 
     private fun fail(reason: String) {
         Log.w(TAG, reason)
+        _handshake.update { it.copy(failed = reason) }
         _state.value = LinkState.Disconnected(reason)
         gatt?.disconnect()
     }
@@ -325,8 +377,9 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
                     return
                 }
                 if (prior !is LinkState.Disconnected) {
-                    _state.value = LinkState.Disconnected(
-                        if (status == BluetoothGatt.GATT_SUCCESS) null else "Link lost (status $status)")
+                    val reason = if (status == BluetoothGatt.GATT_SUCCESS) null else "Link lost (status $status)"
+                    if (inSetup) _handshake.update { it.copy(failed = reason ?: "The turtle closed the connection") }
+                    _state.value = LinkState.Disconnected(reason)
                 }
             }
         }

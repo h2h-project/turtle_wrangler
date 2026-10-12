@@ -119,14 +119,12 @@ private fun Main(vm: WranglerViewModel) {
     val busy by vm.busy.collectAsStateWithLifecycle()
     var showSettings by remember { mutableStateOf(false) }
 
-    if (showSettings) {
-        SettingsPlaceholder { showSettings = false }
-        return
-    }
-
     val current = link
     if (current == null) {
-        LaunchedEffect(Unit) { vm.startScan() }
+        LaunchedEffect(Unit) {
+            showSettings = false            // a new turtle opens on its tabs, not on Settings
+            vm.startScan()
+        }
         ScanScreen(
             found, scanning, noTurtles, lastSeen,
             onScan = vm::startScan, onCancel = vm::stopScan, onPick = vm::connect,
@@ -134,6 +132,7 @@ private fun Main(vm: WranglerViewModel) {
     } else {
         val state by current.state.collectAsStateWithLifecycle()
         val tel by current.telemetry.collectAsStateWithLifecycle()
+        val handshake by current.handshake.collectAsStateWithLifecycle()
         val batt by vm.battHistory.collectAsStateWithLifecycle()
         var tab by rememberSaveable { mutableStateOf(Tab.DASHBOARD) }
         // Re-evaluate "live" every second: connected AND updated recently.
@@ -147,7 +146,10 @@ private fun Main(vm: WranglerViewModel) {
         var showBattery by rememberSaveable { mutableStateOf(false) }
         var showBottle by rememberSaveable { mutableStateOf(false) }
         var showMap by rememberSaveable { mutableStateOf(false) }
-        val run: RunCommand = { label, op, payload, onResult -> vm.command(label, op, payload, onResult) }
+        val run: RunCommand = { label, op, payload, onResult -> vm.command(label, op, payload, onResult = onResult) }
+        val quietRun: RunCommand = { label, op, payload, onResult ->
+            vm.command(label, op, payload, quiet = true, onResult = onResult)
+        }
         val canCommand = state.let { it is LinkState.Ready && !it.readOnly }
         if (showMap) {
             MapPickerScreen(tel, canCommand, busy, notice, run, onBack = { showMap = false })
@@ -162,7 +164,7 @@ private fun Main(vm: WranglerViewModel) {
             return
         }
         TurtleHome(
-            state = state, tel = tel, live = live, battHistory = batt,
+            state = state, handshake = handshake, tel = tel, live = live, battHistory = batt,
             onBattery = { showBattery = true },
             envHistory = env,
             onBottle = { showBottle = true },
@@ -176,7 +178,9 @@ private fun Main(vm: WranglerViewModel) {
             onSecureMode = vm::setSecureMode,
             onPair = vm::pair,
             onDisconnect = vm::disconnect,
-            onSettings = { showSettings = true },
+            settingsOpen = showSettings,
+            onSettings = { showSettings = it },
+            quietRun = quietRun,
         )
     }
 }
@@ -193,23 +197,6 @@ private fun Gate(title: String, body: String, button: String, onClick: () -> Uni
                 Muted(body)
             }
             GreenOutlineButton(button, onClick)
-        }
-    }
-}
-
-/** App Phase 6 builds the real Settings page; the gear already leads here. */
-@Composable
-private fun SettingsPlaceholder(onBack: () -> Unit) {
-    Scaffold(
-        topBar = { WranglerTopBar("Settings", null, false, onSettings = onBack) },
-        containerColor = Wrangler.Background,
-    ) { pad ->
-        Column(Modifier.fillMaxSize().padding(pad).padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            WCard {
-                CardLabel("Coming in app Phase 6")
-                Muted("WiFi, logging interval, Bluetooth lockdown, device info and the danger zone will live here.")
-            }
-            GreenOutlineButton("Back", onBack)
         }
     }
 }

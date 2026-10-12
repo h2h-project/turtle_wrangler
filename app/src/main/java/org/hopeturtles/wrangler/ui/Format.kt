@@ -108,6 +108,13 @@ object Format {
         return if (p.fixAgeS > FIX_STALE_S) "Fix ${p.fixAgeS}s old · $sats" else "Fixed · $sats"
     }
 
+    /** Seconds in the largest whole unit: "2 min" · "1 h" · "45 s". */
+    fun interval(s: Int): String = when {
+        s % 3600 == 0 -> "${s / 3600} h"
+        s % 60 == 0 -> "${s / 60} min"
+        else -> "$s s"
+    }
+
     fun navState(s: NavState?): String? = when (s) {
         NavState.BOOT -> "Starting up"
         NavState.ACQUIRE -> "Acquiring"

@@ -140,7 +140,6 @@ fun DiagnosticsTab(
         ClockCard(tel, enabled = enabled, onSetClock)
         SecureModeCard(tel, enabled = enabled, onSecureMode)
         LinkCard(tel, bondState)
-        DeviceCard(tel)
 
         if (canCommand && bondState != BluetoothDevice.BOND_BONDED) GreenOutlineButton("Pair with this turtle", onPair)
         GreenOutlineButton(if (state is LinkState.Disconnected) "Back to scan" else "Disconnect", onDisconnect)
@@ -327,16 +326,5 @@ private fun LinkCard(tel: TurtleTelemetry, bondState: Int) {
         if (tel.status?.requireBond == false) {
             Text("Unsecured — development turtle (ble_require_bond is off)", color = Wrangler.PinkDark)
         }
-    }
-}
-
-@Composable
-private fun DeviceCard(tel: TurtleTelemetry) {
-    WCard {
-        CardLabel("Device")
-        Field("Manufacturer", tel.deviceInfo?.manufacturer)
-        Field("Model", tel.deviceInfo?.model)
-        Field("Firmware", tel.deviceInfo?.firmware)
-        Field("Serial", tel.deviceInfo?.serial)
     }
 }

@@ -55,6 +55,22 @@ class PayloadsTest {
         assertArrayEquals(hex("b6fe"), Payloads.tzOffset(-330))
     }
 
+    @Test fun wifi_credentials() {
+        // <B> ssid_len, ssid, password — "Home" / "pw1"
+        assertArrayEquals(hex("04486f6d65707731"), Payloads.wifiCredentials(" Home ", "pw1"))
+        assertArrayEquals(hex("04486f6d65"), Payloads.wifiCredentials("Home", ""))   // open network
+        assertArrayEquals(hex("04c3a9c3a9"), Payloads.wifiCredentials("éé", ""))   // length in bytes (4), not chars (2)
+        assertNull(Payloads.wifiCredentials("  ", "pw"))
+        assertNull(Payloads.wifiCredentials("x".repeat(33), "pw"))
+        assertNull(Payloads.wifiCredentials("Home", "p".repeat(64)))
+        assertEquals(98, Payloads.wifiCredentials("s".repeat(32), "p".repeat(63))!!.size + 2)  // fits CMD_BUFFER 128
+    }
+
+    @Test fun ssid() {
+        assertEquals("Home", Payloads.ssid("Home".toByteArray()))
+        assertNull(Payloads.ssid(ByteArray(0)))                          // none saved
+    }
+
     @Test fun compass() {
         assertArrayEquals(hex("56ff"), Payloads.compassOffset(-170))     // struct.pack("<h", -170)
         assertArrayEquals(hex("b400"), Payloads.compassOffset(400))      // clamped to 180

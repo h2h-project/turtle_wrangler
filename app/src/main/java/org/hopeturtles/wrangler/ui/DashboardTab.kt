@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -24,7 +25,11 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -139,45 +144,92 @@ private fun Tile(label: String, value: String?, modifier: Modifier, extra: @Comp
     }
 }
 
-/** Big heading with a compass dial: green needle = heading, dark dot = target bearing. */
+/**
+ * Big heading over a full-width compass dial: a heavy ring with fine ticks
+ * round the outside (2°, longer every 10° and 30°), a green needle for the
+ * heading, and a triangle on the ring pointing in at the target bearing.
+ * The triangle is the screen's pink element (outline over tint, never
+ * solid) unless SAFE has taken that slot, when it goes dark green.
+ */
 @Composable
-private fun HeadingCard(tel: TurtleTelemetry, liveBadgePink: Boolean) {
+private fun HeadingCard(tel: TurtleTelemetry, pinkSlot: Boolean) {
     val heading = tel.nav?.headingDeg
     val bearing = tel.nav?.bearingToTargetDeg
+    val labels = rememberTextMeasurer()
     WCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Canvas(Modifier.size(84.dp)) {
-                val r = size.minDimension / 2f - 4f
-                val c = Offset(size.width / 2f, size.height / 2f)
-                drawCircle(Wrangler.TextMuted, r, c, style = Stroke(2f))
-                // North tick
-                drawLine(Wrangler.Dark, Offset(c.x, c.y - r), Offset(c.x, c.y - r + 10f), 3f)
-                fun at(deg: Double, len: Float): Offset {
-                    val a = Math.toRadians(deg - 90.0)
-                    return Offset(c.x + (len * cos(a)).toFloat(), c.y + (len * sin(a)).toFloat())
-                }
-                bearing?.let { drawCircle(Wrangler.Dark, 6f, at(it, r)) }
-                heading?.let {
-                    drawLine(Wrangler.Primary, c, at(it, r - 6f), 6f, cap = StrokeCap.Round)
-                    drawCircle(Wrangler.Primary, 5f, c)
-                }
-            }
-            Spacer(Modifier.size(16.dp))
             Column(Modifier.weight(1f)) {
                 Text(Format.heading(heading) ?: "—", fontSize = 34.sp,
                     fontWeight = FontWeight.Bold, color = Wrangler.Dark)
                 Muted(bearing?.let { "target is ${Format.degrees(it)} · " +
                     (Format.turnText(Format.turn(heading, it)) ?: "") } ?: "no target bearing")
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    "● live",
-                    color = if (liveBadgePink) Wrangler.PinkDark else Wrangler.Primary,
-                    fontSize = 12.sp, fontWeight = FontWeight.Bold,
-                    modifier = Modifier
-                        .background(if (liveBadgePink) Wrangler.PinkTint else Wrangler.Background,
-                            RoundedCornerShape(50))
-                        .padding(horizontal = 10.dp, vertical = 2.dp),
-                )
+            }
+            Text(
+                "● live", color = Wrangler.Primary, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+                modifier = Modifier.background(Wrangler.Background, RoundedCornerShape(50))
+                    .padding(horizontal = 10.dp, vertical = 2.dp),
+            )
+        }
+        Spacer(Modifier.height(8.dp))
+        Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
+            val c = Offset(size.width / 2f, size.height / 2f)
+            val ringW = 10.dp.toPx()
+            val tickOuter = size.minDimension / 2f - 2.dp.toPx()
+            val tickGap = 3.dp.toPx()
+            val r = tickOuter - 14.dp.toPx() - tickGap - ringW / 2f   // ring centreline
+            fun at(deg: Double, len: Float): Offset {
+                val a = Math.toRadians(deg - 90.0)
+                return Offset(c.x + (len * cos(a)).toFloat(), c.y + (len * sin(a)).toFloat())
+            }
+
+            // Fine ticks outside the ring.
+            for (d in 0 until 360 step 2) {
+                val (len, w, ink) = when {
+                    d % 30 == 0 -> Triple(14.dp, 2.5.dp, Wrangler.Dark)
+                    d % 10 == 0 -> Triple(9.dp, 1.5.dp, Wrangler.Dark)
+                    else -> Triple(5.dp, 1.dp, Wrangler.TextMuted)
+                }
+                drawLine(ink, at(d.toDouble(), tickOuter - len.toPx()), at(d.toDouble(), tickOuter),
+                    w.toPx(), cap = StrokeCap.Butt)
+            }
+            drawCircle(Wrangler.Dark, r, c, style = Stroke(ringW))
+
+            // Cardinal letters just inside the ring.
+            val inside = r - ringW / 2f - 14.dp.toPx()
+            listOf(0 to "N", 90 to "E", 180 to "S", 270 to "W").forEach { (d, s) ->
+                val m = labels.measure(s, TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold,
+                    color = if (d == 0) Wrangler.Dark else Wrangler.TextMuted))
+                val p = at(d.toDouble(), inside)
+                drawText(m, topLeft = Offset(p.x - m.size.width / 2f, p.y - m.size.height / 2f))
+            }
+
+            heading?.let {
+                drawLine(Wrangler.Primary, c, at(it, r - ringW / 2f - 30.dp.toPx()), 7.dp.toPx(),
+                    cap = StrokeCap.Round)
+                drawCircle(Wrangler.Primary, 8.dp.toPx(), c)
+                drawCircle(Wrangler.Surface, 3.dp.toPx(), c)
+            }
+
+            // Target bearing: a triangle riding the ring, point inward.
+            bearing?.let {
+                val half = 11.dp.toPx()
+                val a = Math.toRadians(it - 90.0)
+                val side = Offset(-sin(a).toFloat(), cos(a).toFloat())   // along the ring
+                val base = at(it, r + ringW / 2f + 2.dp.toPx())
+                val tri = Path().apply {
+                    val tip = at(it, r - ringW / 2f - 12.dp.toPx())
+                    moveTo(tip.x, tip.y)
+                    lineTo(base.x + side.x * half, base.y + side.y * half)
+                    lineTo(base.x - side.x * half, base.y - side.y * half)
+                    close()
+                }
+                if (pinkSlot) {
+                    drawPath(tri, Wrangler.PinkTint)
+                    drawPath(tri, Wrangler.PinkDark, style = Stroke(2.5.dp.toPx(), join = StrokeJoin.Round))
+                } else {
+                    drawPath(tri, Wrangler.Light)
+                    drawPath(tri, Wrangler.Dark, style = Stroke(2.5.dp.toPx(), join = StrokeJoin.Round))
+                }
             }
         }
     }

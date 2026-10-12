@@ -304,17 +304,11 @@ private fun ModeCard(st: Status?, enabled: Boolean, onMode: (TelemetryMode) -> U
         Spacer(Modifier.height(6.dp))
         Muted(when (st.telemetryMode) {
             TelemetryMode.OFF -> "The turtle records nothing."
-            TelemetryMode.AUTO -> "The turtle logs a reading " + (st.intervalS?.let { "every ${interval(it)}" } ?: "on a timer") + "."
+            TelemetryMode.AUTO -> "The turtle logs a reading " + (st.intervalS?.let { "every ${Format.interval(it)}" } ?: "on a timer") + "."
             TelemetryMode.MANUAL -> "The turtle records a reading only when you stamp."
             TelemetryMode.UNKNOWN -> "The turtle reports a mode this app doesn't know."
         })
     }
-}
-
-private fun interval(s: Int) = when {
-    s % 3600 == 0 -> "${s / 3600} h"
-    s % 60 == 0 -> "${s / 60} min"
-    else -> "$s s"
 }
 
 // --------------------------------------------------------------------- gps

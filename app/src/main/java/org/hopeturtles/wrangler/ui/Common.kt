@@ -20,6 +20,7 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -44,6 +45,7 @@ fun WranglerTopBar(
     title: String, status: String?, statusOk: Boolean, onSettings: () -> Unit,
     onStatusClick: (() -> Unit)? = null, statusAction: String = "Scan",
     connected: Boolean? = null,
+    settingsOpen: Boolean = false,
 ) {
     TopAppBar(
         title = {
@@ -80,8 +82,14 @@ fun WranglerTopBar(
                 )
                 Spacer(Modifier.width(4.dp))
             }
-            IconButton(onClick = onSettings) {
-                Icon(Icons.Filled.Settings, contentDescription = "Settings", tint = Wrangler.Dark)
+            // Highlighted while Settings is open (it's not a tab, so no tab is).
+            IconButton(
+                onClick = onSettings,
+                colors = if (settingsOpen) IconButtonDefaults.iconButtonColors(containerColor = Wrangler.Light)
+                    else IconButtonDefaults.iconButtonColors(),
+            ) {
+                Icon(Icons.Filled.Settings, contentDescription = if (settingsOpen) "Close settings" else "Settings",
+                    tint = if (settingsOpen) Wrangler.Primary else Wrangler.Dark)
             }
         },
         colors = TopAppBarDefaults.topAppBarColors(containerColor = Wrangler.Surface),

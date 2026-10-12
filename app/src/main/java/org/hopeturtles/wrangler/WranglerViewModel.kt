@@ -234,15 +234,17 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
      * runs after the generic notice is set, so it can replace it with
      * something more specific via [say].
      */
+    /** [quiet]: a read the user didn't ask for (e.g. Settings fetching the
+     *  SSID) — no notices unless it fails for want of pairing. */
     fun command(label: String, opcode: Int, payload: ByteArray = ByteArray(0),
-                onResult: (CommandResult) -> Unit = {}) {
+                quiet: Boolean = false, onResult: (CommandResult) -> Unit = {}) {
         val c = client ?: return
         if (_busy.value != null) return
         _busy.value = label                      // before launch: a double-tap can't send twice
         viewModelScope.launch {
-            _notice.value = Notice("$label…", true)
+            if (!quiet) _notice.value = Notice("$label…", true)
             val r = try { c.send(opcode, payload) } finally { _busy.value = null }
-            _notice.value = Notice("$label: ${r.message}", r.code.ok)
+            if (!quiet || r.code == ResultCode.NOT_BONDED) _notice.value = Notice("$label: ${r.message}", r.code.ok)
             if (r.code == ResultCode.NOT_BONDED) pair()
             onResult(r)
         }

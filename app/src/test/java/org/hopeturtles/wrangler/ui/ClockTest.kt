@@ -22,4 +22,17 @@ class ClockTest {
         assertEquals("UTC−5:30", tzLabel(-330))
         assertEquals("UTC+5:45", tzLabel(345))
     }
+
+    @Test fun clock_vs_phone_words() {
+        assertEquals("In step with this phone", clockVsPhone(difference(1)))
+        assertEquals("3 min behind this phone", clockVsPhone(difference(-200)))
+        assertEquals("5 h ahead of this phone", clockVsPhone(difference(5 * 3_600 + 10)))
+    }
+
+    @Test fun interval_words() {
+        assertEquals("2 min", Format.interval(120))
+        assertEquals("1 h", Format.interval(3_600))
+        assertEquals("45 s", Format.interval(45))
+        assertEquals("90 s", Format.interval(90))
+    }
 }

@@ -27,6 +27,20 @@ object Payloads {
     /** TIME_SET OK → `<B>` rtc_chip_written (false = system clock only, lost at the next boot). */
     fun rtcChipWritten(p: ByteArray): Boolean? = if (p.isEmpty()) null else p[0].toInt() != 0
 
+    /**
+     * WIFI_SET_CREDENTIALS `<B>` ssid_len, SSID, password (UTF-8). Null when
+     * the SSID is empty or over 32 bytes, or the password over 63 bytes.
+     */
+    fun wifiCredentials(ssid: String, password: String): ByteArray? {
+        val s = ssid.trim().toByteArray(Charsets.UTF_8)
+        val p = password.toByteArray(Charsets.UTF_8)
+        if (s.isEmpty() || s.size > 32 || p.size > 63) return null
+        return byteArrayOf(s.size.toByte()) + s + p
+    }
+
+    /** WIFI_GET_SSID OK → the saved SSID; null = none saved. */
+    fun ssid(p: ByteArray): String? = p.toString(Charsets.UTF_8).trim().ifEmpty { null }
+
     /** TIMEZONE_SET `<h>` minutes from UTC (−720..840). */
     fun tzOffset(min: Int): ByteArray = le(2).putShort(min.toShort()).array()
 
