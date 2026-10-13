@@ -33,11 +33,13 @@ import org.hopeturtles.wrangler.ui.CardLabel
 import org.hopeturtles.wrangler.ui.GreenOutlineButton
 import org.hopeturtles.wrangler.ui.BatteryGraphScreen
 import org.hopeturtles.wrangler.ui.BottleGraphScreen
+import org.hopeturtles.wrangler.ui.LiveMapScreen
 import org.hopeturtles.wrangler.ui.MapPickerScreen
 import org.hopeturtles.wrangler.ui.RunCommand
 import org.hopeturtles.wrangler.ui.Format
 import org.hopeturtles.wrangler.ui.Tab
 import org.hopeturtles.wrangler.ui.TurtleHome
+import org.hopeturtles.wrangler.ble.LatLon
 import org.hopeturtles.wrangler.ble.LinkState
 import kotlinx.coroutines.delay
 import androidx.compose.runtime.produceState
@@ -155,13 +157,24 @@ private fun Main(vm: WranglerViewModel) {
         var showBattery by rememberSaveable { mutableStateOf(false) }
         var showBottle by rememberSaveable { mutableStateOf(false) }
         var showMap by rememberSaveable { mutableStateOf(false) }
+        var showLiveMap by rememberSaveable { mutableStateOf(false) }
+        var pickFrom by remember { mutableStateOf<LatLon?>(null) }
+        var journeySetup by rememberSaveable { mutableStateOf(false) }
+        val trail by vm.trail.collectAsStateWithLifecycle()
+        val departures by vm.departures.collectAsStateWithLifecycle()
         val run: RunCommand = { label, op, payload, onResult -> vm.command(label, op, payload, onResult = onResult) }
         val quietRun: RunCommand = { label, op, payload, onResult ->
             vm.command(label, op, payload, quiet = true, onResult = onResult)
         }
         val canCommand = state.let { it is LinkState.Ready && !it.readOnly }
         if (showMap) {
-            MapPickerScreen(tel, canCommand, busy, notice, run, onBack = { showMap = false })
+            MapPickerScreen(tel, canCommand, busy, notice, run, onBack = { showMap = false; pickFrom = null },
+                start = pickFrom)
+            return
+        }
+        if (showLiveMap) {
+            LiveMapScreen(tel, trail, departures, stampLog, canPick = canCommand,
+                onPick = { pickFrom = it; showMap = true }, onBack = { showLiveMap = false })
             return
         }
         if (showBattery) {
@@ -181,6 +194,12 @@ private fun Main(vm: WranglerViewModel) {
             bondState = bond, notice = notice, busy = busy, run = run, say = vm::say,
             onPickOnMap = { showMap = true },
             onServo = vm::servoTo,
+            trail = trail,
+            departures = departures,
+            onOpenMap = { showLiveMap = true },
+            onStartJourney = vm::startJourney,
+            journeySetup = journeySetup,
+            onJourneySetup = { journeySetup = it },
             stampLog = stampLog,
             onStamp = vm::stamp,
             onSetClock = vm::setTurtleClock,

@@ -24,6 +24,7 @@ import org.hopeturtles.wrangler.BattSample
 import org.hopeturtles.wrangler.EnvSample
 import org.hopeturtles.wrangler.Notice
 import org.hopeturtles.wrangler.ble.Handshake
+import org.hopeturtles.wrangler.ble.LatLon
 import org.hopeturtles.wrangler.ble.LinkState
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
 import org.hopeturtles.wrangler.data.StampEntry
@@ -56,6 +57,12 @@ fun TurtleHome(
     say: (String, Boolean) -> Unit,
     onPickOnMap: () -> Unit,
     onServo: (Int) -> Unit,
+    trail: List<LatLon>,
+    departures: Map<Long, LatLon>,
+    onOpenMap: () -> Unit,
+    onStartJourney: () -> Unit,
+    journeySetup: Boolean,
+    onJourneySetup: (Boolean) -> Unit,
     stampLog: List<StampEntry>,
     onStamp: () -> Unit,
     onSetClock: () -> Unit,
@@ -114,11 +121,14 @@ fun TurtleHome(
         Box(Modifier.fillMaxSize().padding(pad)) {
             if (settingsOpen) SettingsScreen(state, tel, notice, busy, run, quietRun, say)
             else when (tab) {
-                Tab.DASHBOARD -> DashboardTab(tel, live, battHistory, onBattery, envHistory, onBottle)
+                Tab.DASHBOARD -> DashboardTab(tel, live, battHistory, onBattery, envHistory, onBottle,
+                    onMap = { onTab(Tab.NAVIGATE) })
                 Tab.NAVIGATE -> NavigateTab(
                     tel, live, canCommand = state is LinkState.Ready && !state.readOnly,
                     busy = busy, notice = notice, run = run, say = say, onPickOnMap = onPickOnMap,
-                    onServo = onServo,
+                    onServo = onServo, trail = trail, departures = departures, stamps = stampLog,
+                    onOpenMap = onOpenMap, onStartJourney = onStartJourney,
+                    setupOpen = journeySetup, onSetupOpen = onJourneySetup,
                 )
                 Tab.GPS -> GpsTab(
                     tel, live, canCommand = state is LinkState.Ready && !state.readOnly,

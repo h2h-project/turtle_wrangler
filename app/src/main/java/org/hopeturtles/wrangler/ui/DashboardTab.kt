@@ -57,6 +57,7 @@ fun DashboardTab(
     onBattery: () -> Unit,
     envHistory: List<EnvSample>,
     onBottle: () -> Unit,
+    onMap: () -> Unit,
 ) {
     val nav = tel.nav
     val safe = nav?.state == NavState.SAFE
@@ -76,6 +77,12 @@ fun DashboardTab(
 
         Column(Modifier.alpha(if (live) 1f else 0.5f), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             HeadingCard(tel)
+            // Where the turtle is (its own GPS, never the phone's). Tap → Navigate.
+            WCard {
+                Muted("Map")
+                Spacer(Modifier.height(6.dp))
+                MapFrame(turtleScene(tel), grey = false, onOpen = onMap, Modifier.height(200.dp))
+            }
             // Tap → full-screen charging graph.
             Tile("Battery", tel.power?.socPct?.let { "$it%" }, Modifier.clickable(onClick = onBattery)) {
                 ChargeLine(tel.power?.currentMa)

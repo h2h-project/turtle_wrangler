@@ -22,6 +22,7 @@ import kotlinx.coroutines.withTimeoutOrNull
 import org.hopeturtles.wrangler.ble.CommandClient
 import org.hopeturtles.wrangler.ble.CommandResult
 import org.hopeturtles.wrangler.ble.FoundTurtle
+import org.hopeturtles.wrangler.ble.LatLon
 import org.hopeturtles.wrangler.ble.LinkState
 import org.hopeturtles.wrangler.ble.NotStamped
 import org.hopeturtles.wrangler.ble.Op
@@ -31,10 +32,14 @@ import org.hopeturtles.wrangler.ble.TurtleConnection
 import org.hopeturtles.wrangler.ble.TurtleScanner
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
 import org.hopeturtles.wrangler.ble.TurtleUuids
+import org.hopeturtles.wrangler.data.JourneyStore
 import org.hopeturtles.wrangler.data.LastSeen
 import org.hopeturtles.wrangler.data.LastSeenStore
 import org.hopeturtles.wrangler.data.StampEntry
 import org.hopeturtles.wrangler.data.StampLogStore
+import org.hopeturtles.wrangler.ui.Format
+import org.hopeturtles.wrangler.ui.Geo
+import org.hopeturtles.wrangler.ui.clockHm
 import org.hopeturtles.wrangler.ui.tzLabel
 import java.util.TimeZone
 
@@ -56,6 +61,7 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
     val scanner = TurtleScanner(app)
     private val lastSeenStore = LastSeenStore(app)
     private val stampStore = StampLogStore(app)
+    private val journeyStore = JourneyStore(app)
 
     private val _connection = MutableStateFlow<TurtleConnection?>(null)
     val connection: StateFlow<TurtleConnection?> = _connection.asStateFlow()
@@ -90,6 +96,15 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
     /** The connected turtle's manual-stamp log (GPS tab), oldest first. */
     private val _stampLog = MutableStateFlow<List<StampEntry>>(emptyList())
     val stampLog: StateFlow<List<StampEntry>> = _stampLog.asStateFlow()
+
+    /** The turtle's path this connection (live map trail): a point each time
+     *  it has moved [TRAIL_STEP_M] from the last one. Starts empty on connect. */
+    private val _trail = MutableStateFlow<List<LatLon>>(emptyList())
+    val trail: StateFlow<List<LatLon>> = _trail.asStateFlow()
+
+    /** journey_id → where it left from, for journeys this phone started (see [JourneyStore]). */
+    private val _departures = MutableStateFlow<Map<Long, LatLon>>(emptyMap())
+    val departures: StateFlow<Map<Long, LatLon>> = _departures.asStateFlow()
 
     /** Turtle clock minus phone clock (ms), from the last `device_now`. */
     private var clockOffsetMs: Long? = null
@@ -132,12 +147,25 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
         _battHistory.value = emptyList()
         _envHistory.value = emptyList()
         _stampLog.value = stampStore.load(t.address)
+        _trail.value = emptyList()
+        _departures.value = journeyStore.load(t.address)
         clockOffsetMs = null
         historyJob = viewModelScope.launch {
             var last: Any? = null
             var lastEnv: Any? = null
             var lastShore: Any? = null
+            var lastPos: Any? = null
             link.telemetry.collect { t ->
+                val pos = t.position
+                if (pos != null && pos !== lastPos) {
+                    lastPos = pos
+                    if (pos.hasFix && !Format.fixStale(pos)) {
+                        val here = LatLon(pos.lat!!, pos.lon!!)
+                        val prev = _trail.value.lastOrNull()
+                        if (prev == null || (Geo.distanceM(prev, here) ?: 0) >= TRAIL_STEP_M)
+                            _trail.value = (_trail.value + here).takeLast(TRAIL_MAX)
+                    }
+                }
                 val sh = t.shore
                 if (sh != null && sh !== lastShore) {
                     lastShore = sh
@@ -353,6 +381,31 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    // ------------------------------------------------------------ journeys
+
+    /**
+     * JOURNEY_START. The turtle stamps its own GPS fix as the departure; the
+     * contract doesn't echo it, so the phone records the turtle's position
+     * from the same moment for the map.
+     */
+    fun startJourney() {
+        val link = _connection.value ?: return
+        command("Start journey", Op.JOURNEY_START) { r ->
+            when {
+                r.code.ok -> {
+                    val id = Payloads.journeyId(r.payload)
+                    val p = link.telemetry.value.position?.takeIf { it.hasFix }
+                    if (id != null && p != null)
+                        _departures.value = journeyStore.add(link.device.address, id, LatLon(p.lat!!, p.lon!!))
+                    say("Journey started" + (id?.let { " at " + clockHm(it) } ?: "") +
+                        ". Every reading is tagged until you end it.", true)
+                }
+                r.code == ResultCode.WRONG_STATE -> say("A journey is already open on the turtle.", false)
+                else -> say("Couldn't start the journey: ${r.message}", false)
+            }
+        }
+    }
+
     // ------------------------------------------------------------ turtle clock
 
     /**
@@ -425,5 +478,7 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
     companion object {
         const val NO_TURTLE_AFTER_MS = 12_000L
         const val HISTORY_MAX = 2_880          // 4 h at the Power characteristic's 5 s rate
+        const val TRAIL_STEP_M = 5L            // GPS jitter at rest stays under this
+        const val TRAIL_MAX = 5_000
     }
 }

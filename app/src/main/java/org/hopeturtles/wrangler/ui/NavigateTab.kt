@@ -12,6 +12,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -31,22 +32,22 @@ import org.hopeturtles.wrangler.ble.Payloads
 import org.hopeturtles.wrangler.ble.ResultCode
 import org.hopeturtles.wrangler.ble.TargetSource
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
+import org.hopeturtles.wrangler.data.StampEntry
 import org.hopeturtles.wrangler.ui.theme.Wrangler
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
 import kotlin.math.abs
 import kotlin.math.max
 
 /** Sends a command; the callback sees the result after the generic notice is set. */
 typealias RunCommand = (label: String, opcode: Int, payload: ByteArray, onResult: (CommandResult) -> Unit) -> Unit
 
-private enum class Ask { SET_HERE, USE_MISSION, CLEAR, START, END, OFFER_JOURNEY }
+private enum class Ask { SET_HERE, USE_MISSION, CLEAR, END }
 
 /**
- * Navigate tab (app plan Phase 3): where the turtle is going, the operator
- * journey, and how far off the line it is. Every action is a contract v1
- * command — the same code path as the OLED's Destination and Journey screens.
+ * Navigate tab (app plan Phases 3 and 7b): the journey and its map, where the
+ * turtle is going, and how far off the line it is. Every action is a contract
+ * v1 command — the same code path as the OLED's Destination and Journey
+ * screens. [setupOpen] (the "Start a journey" modal) is hoisted so it is
+ * still open on return from the map picker.
  */
 @Composable
 fun NavigateTab(
@@ -59,34 +60,44 @@ fun NavigateTab(
     say: (String, Boolean) -> Unit,
     onPickOnMap: () -> Unit,
     onServo: (Int) -> Unit,
+    trail: List<LatLon>,
+    departures: Map<Long, LatLon>,
+    stamps: List<StampEntry>,
+    onOpenMap: () -> Unit,
+    onStartJourney: () -> Unit,
+    setupOpen: Boolean,
+    onSetupOpen: (Boolean) -> Unit,
 ) {
     var ask by remember { mutableStateOf<Ask?>(null) }
     val enabled = canCommand && busy == null
     val here = tel.position?.takeIf { it.hasFix }?.let { LatLon(it.lat!!, it.lon!!) }
     val journeyOpen = tel.status?.journeyActive == true
-
-    fun startJourney() = run("Start journey", Op.JOURNEY_START, ByteArray(0)) { r ->
-        when {
-            r.code.ok -> say("Journey started" +
-                (Payloads.journeyId(r.payload)?.let { " at " + clock(it) } ?: "") +
-                ". Every reading is tagged until you end it.", true)
-            r.code == ResultCode.WRONG_STATE -> say("A journey is already open on the turtle.", false)
-            else -> say("Couldn't start the journey: ${r.message}", false)
-        }
-    }
+    // A journey opened elsewhere (the turtle's own screen) closes the modal.
+    LaunchedEffect(journeyOpen) { if (journeyOpen) onSetupOpen(false) }
 
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        ServoDial(tel.sail, tel.status?.servoPresent, canCommand, onServo)
         NoticeCard(notice, busy)
         if (!live) Muted("Not live — values are the last ones received.")
+        JourneyPanel(tel, enabled, trail, departures, stamps, onOpenMap,
+            onStart = { onSetupOpen(true) }, onEnd = { ask = Ask.END })
+        ServoDial(tel.sail, tel.status?.servoPresent, canCommand, onServo)
         CourseCard(tel)
         DestinationCard(tel, here, enabled, onPickOnMap, onAsk = { ask = it })
-        JourneyCard(tel, journeyOpen, enabled, onAsk = { ask = it })
         if (!canCommand) Muted("Commands are unavailable on this link (see Diagnostics).")
     }
+
+    // The modal first, so the confirmations below open over it.
+    if (setupOpen && !journeyOpen) JourneySetupDialog(
+        tel, enabled,
+        onSetHere = { ask = Ask.SET_HERE },
+        onPickOnMap = onPickOnMap,
+        onUseMission = { ask = Ask.USE_MISSION },
+        onStart = onStartJourney,
+        onDismiss = { onSetupOpen(false) },
+    )
 
     when (ask) {
         Ask.SET_HERE -> {
@@ -108,22 +119,14 @@ fun NavigateTab(
                             val at = Payloads.latLon(r.payload)
                             say("Target set to the turtle's position" +
                                 (at?.let { " (${Format.latLon(it.lat, it.lon)})" } ?: "") + ".", true)
-                            if (!journeyOpen) ask = Ask.OFFER_JOURNEY
+                            // The OLED hands off to its Journey screen here; the app offers the modal.
+                            if (!journeyOpen) onSetupOpen(true)
                         }
                     }
                 },
                 onDismiss = { ask = null },
             )
         }
-        Ask.OFFER_JOURNEY -> ConfirmDialog(
-            title = "Start journey now?",
-            body = "Stamp the turtle's departure point and tag every reading until you end the journey " +
-                "— the same hand-off the turtle's Destination screen makes.",
-            confirm = "Start journey",
-            dismiss = "Not now",
-            onConfirm = ::startJourney,
-            onDismiss = { ask = null },
-        )
         Ask.USE_MISSION -> ConfirmDialog(
             title = "Use the mission target?",
             body = "The turtle steers for the mission target " +
@@ -138,14 +141,6 @@ fun NavigateTab(
             body = "The turtle forgets the target you set and falls back to its mission target, if it has one.",
             confirm = "Clear",
             onConfirm = { run("Clear target", Op.DEST_CLEAR, ByteArray(0)) {} },
-            onDismiss = { ask = null },
-        )
-        Ask.START -> ConfirmDialog(
-            title = "Start a journey?",
-            body = "The turtle stamps its departure point from its GPS and tags every reading " +
-                "(auto, manual and queued) with this journey until you end it.",
-            confirm = "Start journey",
-            onConfirm = ::startJourney,
             onDismiss = { ask = null },
         )
         Ask.END -> ConfirmDialog(
@@ -169,9 +164,6 @@ fun NavigateTab(
         null -> {}
     }
 }
-
-private fun clock(unixS: Long): String =
-    SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(unixS * 1000))
 
 // ------------------------------------------------------------------ course
 
@@ -281,41 +273,4 @@ private fun TargetRow(label: String, p: LatLon?, here: LatLon?, active: Boolean,
             color = if (p != null) Wrangler.Text else Wrangler.TextMuted, fontSize = 14.sp)
         Geo.distanceM(here, p)?.let { Muted("${Format.distance(it)} from the turtle") }
     }
-}
-
-// ------------------------------------------------------------------ journey
-
-@Composable
-private fun JourneyCard(tel: TurtleTelemetry, open: Boolean, enabled: Boolean, onAsk: (Ask) -> Unit) {
-    WCard {
-        CardLabel("Journey")
-        if (tel.status == null) {
-            Muted("Waiting for the turtle's status…")
-            return@WCard
-        }
-        if (open) {
-            Text("Trip in progress", fontWeight = FontWeight.Bold, color = Wrangler.Primary, fontSize = 16.sp)
-            val id = tel.shore?.journeyId
-            if (id != null) {
-                val now = tel.shore?.deviceNow ?: (System.currentTimeMillis() / 1000)
-                Field("Started", SimpleDateFormat("d MMM, HH:mm", Locale.getDefault()).format(Date(id * 1000)))
-                Field("Under way for", elapsed(now - id))
-                Field("Journey ID", id.toString())
-            }
-            Spacer8()
-            GreenOutlineButton("End journey", { onAsk(Ask.END) }, enabled = enabled)
-        } else {
-            Text("No journey open", fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 16.sp)
-            Muted("Starting one stamps the turtle's departure point and tags every reading until you end it.")
-            Spacer8()
-            GreenOutlineButton("Start journey", { onAsk(Ask.START) }, enabled = enabled)
-        }
-    }
-}
-
-private fun elapsed(s: Long): String = when {
-    s < 0 -> "—"
-    s < 3_600 -> "${s / 60} min"
-    s < 86_400 -> "${s / 3_600} h ${(s % 3_600) / 60} min"
-    else -> "${s / 86_400} d ${(s % 86_400) / 3_600} h"
 }
