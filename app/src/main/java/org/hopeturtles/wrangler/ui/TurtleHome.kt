@@ -27,6 +27,7 @@ import org.hopeturtles.wrangler.ble.Handshake
 import org.hopeturtles.wrangler.ble.LatLon
 import org.hopeturtles.wrangler.ble.LinkState
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
+import org.hopeturtles.wrangler.data.JourneyRecord
 import org.hopeturtles.wrangler.data.StampEntry
 import org.hopeturtles.wrangler.ui.theme.Wrangler
 
@@ -58,9 +59,11 @@ fun TurtleHome(
     onPickOnMap: () -> Unit,
     onServo: (Int) -> Unit,
     trail: List<LatLon>,
-    departures: Map<Long, LatLon>,
+    journeys: List<JourneyRecord>,
     onOpenMap: () -> Unit,
     onStartJourney: () -> Unit,
+    onEndJourney: () -> Unit,
+    onReviewJourney: (Long) -> Unit,
     journeySetup: Boolean,
     onJourneySetup: (Boolean) -> Unit,
     stampLog: List<StampEntry>,
@@ -126,8 +129,9 @@ fun TurtleHome(
                 Tab.NAVIGATE -> NavigateTab(
                     tel, live, canCommand = state is LinkState.Ready && !state.readOnly,
                     busy = busy, notice = notice, run = run, say = say, onPickOnMap = onPickOnMap,
-                    onServo = onServo, trail = trail, departures = departures, stamps = stampLog,
-                    onOpenMap = onOpenMap, onStartJourney = onStartJourney,
+                    onServo = onServo, trail = trail, journeys = journeys, stamps = stampLog,
+                    onOpenMap = onOpenMap, onStartJourney = onStartJourney, onEndJourney = onEndJourney,
+                    onReviewJourney = onReviewJourney,
                     setupOpen = journeySetup, onSetupOpen = onJourneySetup,
                 )
                 Tab.GPS -> GpsTab(

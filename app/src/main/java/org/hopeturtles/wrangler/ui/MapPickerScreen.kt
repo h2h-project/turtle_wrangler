@@ -45,6 +45,7 @@ import org.hopeturtles.wrangler.ble.LatLon
 import org.hopeturtles.wrangler.ble.Op
 import org.hopeturtles.wrangler.ble.Payloads
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
+import org.hopeturtles.wrangler.ui.theme.Brand
 import org.hopeturtles.wrangler.ui.theme.Wrangler
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraPosition
@@ -147,7 +148,7 @@ fun MapPickerScreen(
                     JumpTo("Mission", mission, MISSION_C, map, 9.0)
                 }
                 Text(Format.latLon(center?.lat, center?.lon) ?: "—", fontWeight = FontWeight.Bold,
-                    color = Wrangler.Dark, fontSize = 16.sp)
+                    color = Wrangler.Ink, fontSize = 16.sp)
                 Muted(Geo.distanceM(here, center)?.let { "${Format.distance(it)} from the turtle" }
                     ?: "Turtle position unknown (no GPS fix)")
                 if (busy != null || notice != null) NoticeCard(notice, busy)
@@ -209,7 +210,7 @@ private fun Crosshair(modifier: Modifier) {
     Canvas(modifier.size(36.dp)) {
         val c = Offset(size.width / 2, size.height / 2)
         val r = size.width / 2
-        for (col in listOf(Color.White to 5.dp.toPx(), Wrangler.Dark to 2.dp.toPx())) {
+        for (col in listOf(Color.White to 5.dp.toPx(), Brand.Dark to 2.dp.toPx())) {
             drawLine(col.first, Offset(c.x - r, c.y), Offset(c.x - 5.dp.toPx(), c.y), col.second)
             drawLine(col.first, Offset(c.x + 5.dp.toPx(), c.y), Offset(c.x + r, c.y), col.second)
             drawLine(col.first, Offset(c.x, c.y - r), Offset(c.x, c.y - 5.dp.toPx()), col.second)

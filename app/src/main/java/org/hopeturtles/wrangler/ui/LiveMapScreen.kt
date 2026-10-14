@@ -31,7 +31,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.hopeturtles.wrangler.ble.LatLon
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
+import org.hopeturtles.wrangler.data.JourneyRecord
 import org.hopeturtles.wrangler.data.StampEntry
+import org.hopeturtles.wrangler.ui.theme.Brand
 import org.hopeturtles.wrangler.ui.theme.Wrangler
 import org.maplibre.android.maps.MapLibreMap
 import java.text.SimpleDateFormat
@@ -49,14 +51,14 @@ import java.util.Locale
 fun LiveMapScreen(
     tel: TurtleTelemetry,
     trail: List<LatLon>,
-    departures: Map<Long, LatLon>,
+    journeys: List<JourneyRecord>,
     stamps: List<StampEntry>,
     canPick: Boolean,
     onPick: (LatLon?) -> Unit,
     onBack: () -> Unit,
 ) {
     BackHandler(onBack = onBack)
-    val scene = liveScene(tel, trail, departures, stamps)
+    val scene = liveScene(tel, trail, journeys, stamps)
     val live = openJourney(tel) != null
     var follow by remember { mutableStateOf(true) }
     var map by remember { mutableStateOf<MapLibreMap?>(null) }
@@ -84,20 +86,20 @@ fun LiveMapScreen(
                 )
                 Pill(if (live) "● Live journey" else "No journey",
                     if (live) Color.White else Wrangler.TextMuted,
-                    if (live) Wrangler.PinkDark else Wrangler.CardBorder,
+                    if (live) Wrangler.Fuchsia else Wrangler.CardBorder,
                     Modifier.align(Alignment.TopEnd).padding(10.dp))
                 val note = when {
                     scene.turtle == null -> "No GPS fix — the turtle's position is unknown"
                     scene.stale -> "fix ${scene.fixAgeS ?: "?"} s old"
                     else -> null
                 }
-                note?.let { Pill(it, Wrangler.Dark, Color.White.copy(alpha = 0.9f),
+                note?.let { Pill(it, Brand.Dark, Color.White.copy(alpha = 0.9f),
                     Modifier.align(Alignment.TopStart).padding(10.dp)) }
                 if (!follow) TextButton(
                     onClick = { follow = true },
                     modifier = Modifier.align(Alignment.BottomEnd).padding(10.dp)
                         .background(Color.White, androidx.compose.foundation.shape.RoundedCornerShape(50)),
-                ) { Text("Recentre", color = Wrangler.Primary, fontWeight = FontWeight.Bold) }
+                ) { Text("Recentre", color = Brand.Primary, fontWeight = FontWeight.Bold) }
             }
             Column(
                 Modifier.fillMaxWidth().background(Wrangler.Surface).padding(16.dp),
@@ -106,7 +108,7 @@ fun LiveMapScreen(
                 tapped?.let { s ->
                     Text((if (s.sent) "Sent" else "Stamped") + " · " +
                         SimpleDateFormat("d MMM, HH:mm:ss", Locale.getDefault()).format(Date(s.atMs)),
-                        fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 14.sp)
+                        fontWeight = FontWeight.Bold, color = Wrangler.Ink, fontSize = 14.sp)
                     Muted(Format.latLon(s.lat, s.lon) ?: "—")
                 }
                 Legend(scene)

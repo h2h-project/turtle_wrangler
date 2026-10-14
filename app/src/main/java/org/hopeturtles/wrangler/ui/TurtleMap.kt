@@ -37,6 +37,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import org.hopeturtles.wrangler.ble.LatLon
 import org.hopeturtles.wrangler.data.StampEntry
+import org.hopeturtles.wrangler.ui.theme.Brand
 import org.hopeturtles.wrangler.ui.theme.Wrangler
 import org.maplibre.android.MapLibre
 import org.maplibre.android.camera.CameraUpdateFactory
@@ -99,25 +100,31 @@ data class MapScene(
     val route: Boolean = false,
     val trail: List<LatLon> = emptyList(),
     val stamps: List<StampEntry> = emptyList(),
+    /** A past journey's end point (the journey log). */
+    val arrival: LatLon? = null,
+    /** Keep the whole trail in view too (a past journey's route). */
+    val fitTrail: Boolean = false,
 ) {
     /** What the camera keeps in view while it follows. */
     val fitPoints: List<LatLon>
-        get() = listOfNotNull(turtle, active.takeIf { course || route }, departure.takeIf { route })
+        get() = (listOfNotNull(turtle, active.takeIf { course || route }, departure.takeIf { route }, arrival) +
+            (if (fitTrail) trail else emptyList()))
             .ifEmpty { listOfNotNull(set, mission) }
 }
 
 /** Marker styles: identity by entity, shape as well as colour (targets are rings). */
 data class Mark(val fill: Color, val stroke: Color, val strokeDp: Float, val radiusDp: Float = 8f)
 
-val TURTLE_C = Mark(Wrangler.Primary, Color.White, 2f)
-val SET_C = Mark(Color.White, Wrangler.Dark, 4f)
-val MISSION_C = Mark(Wrangler.TextMuted, Color.White, 2f)
-val DEPARTURE_C = Mark(Wrangler.Pink, Color.White, 2.5f, 7f)
-val STAMPED_C = Mark(Color.White, Wrangler.Fuchsia, 2.5f, 5f)
-val SENT_C = Mark(Wrangler.Fuchsia, Color.White, 1.5f, 5f)
-val COURSE_COLOR = Wrangler.PinkDark
-val ROUTE_COLOR = Wrangler.Dark
-val TRAIL_COLOR = Wrangler.Fuchsia
+val TURTLE_C = Mark(Brand.Primary, Color.White, 2f)
+val SET_C = Mark(Color.White, Brand.Dark, 4f)
+val MISSION_C = Mark(Brand.TextMuted, Color.White, 2f)
+val DEPARTURE_C = Mark(Brand.Pink, Color.White, 2.5f, 7f)
+val ARRIVAL_C = Mark(Brand.Dark, Color.White, 2.5f, 7f)
+val STAMPED_C = Mark(Color.White, Brand.Fuchsia, 2.5f, 5f)
+val SENT_C = Mark(Brand.Fuchsia, Color.White, 1.5f, 5f)
+val COURSE_COLOR = Brand.PinkDark
+val ROUTE_COLOR = Brand.Dark
+val TRAIL_COLOR = Brand.Fuchsia
 
 /**
  * A MapLibre map of [scene]. [follow]: keep the camera on [MapScene.fitPoints];
@@ -222,7 +229,7 @@ private val GREY_EFFECT = RenderEffect.createColorFilterEffect(
 // ------------------------------------------------------------------ layers
 
 private val SOURCES = listOf("trail", "route", "course", "mission", "set", "active", "departure",
-    "stamped", "sent", "turtle")
+    "arrival", "stamped", "sent", "turtle")
 
 /** Every source and layer, empty, bottom to top. [draw] fills them. */
 private fun addLayers(style: Style, dp: Float) {
@@ -237,10 +244,11 @@ private fun addLayers(style: Style, dp: Float) {
         lineColor(ROUTE_COLOR.toArgb()), lineWidth(2.5f), lineDasharray(arrayOf(2f, 2f))))
     style.addLayer(LineLayer("course-line", "course").withProperties(
         lineColor(COURSE_COLOR.toArgb()), lineWidth(3.5f), lineCap(Property.LINE_CAP_ROUND)))
-    circle(style, "active", Mark(Color.Transparent, Wrangler.Pink, 4f, 14f))
+    circle(style, "active", Mark(Color.Transparent, Brand.Pink, 4f, 14f))
     circle(style, "mission", MISSION_C)
     circle(style, "set", SET_C)
     circle(style, "departure", DEPARTURE_C)
+    circle(style, "arrival", ARRIVAL_C)
     circle(style, "stamped", STAMPED_C)
     circle(style, "sent", SENT_C)
     style.addLayer(SymbolLayer("turtle-icon", "turtle").withProperties(
@@ -274,6 +282,7 @@ private fun draw(style: Style, s: MapScene) {
     point("mission", s.mission)
     point("active", s.active)
     point("departure", s.departure)
+    point("arrival", s.arrival)
     line("trail", s.trail + listOfNotNull(s.turtle))     // up to the marker
     line("course", if (s.course) listOfNotNull(s.turtle, s.active) else emptyList())
     line("route", if (s.route) listOfNotNull(s.departure, s.active) else emptyList())

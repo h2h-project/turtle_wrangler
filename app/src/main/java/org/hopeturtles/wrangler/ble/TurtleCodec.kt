@@ -73,6 +73,26 @@ data class Sail(
 
 data class Power(val voltageMv: Int?, val currentMa: Int?, val socPct: Int?)
 
+/**
+ * `0119` Journey (turtleOS 2.6.0): the open journey and where the turtle
+ * stamped its departure, and the newest ended journey in its history.
+ * When [lastEndedId] changes, a journey has ended: fetch it with
+ * JOURNEY_LIST index 0.
+ */
+data class JourneyInfo(val openId: Long?, val departure: LatLon?, val lastEndedId: Long?)
+
+/** A track point from JOURNEY_TRACK: one of the journey's queued readings. */
+data class TrackPoint(val t: Long, val lat: Double, val lon: Double, val state: NavState?)
+
+/** One JOURNEY_TRACK page: [n] points from [start] of [total] (sentinel points dropped from [points]). */
+data class TrackPage(val total: Int, val start: Int, val n: Int, val points: List<TrackPoint>)
+
+/** A journey from the turtle's history (JOURNEY_LIST). [endedAt] null: the clock was lost. */
+data class TurtleJourney(
+    val id: Long, val endedAt: Long?, val departure: LatLon?, val destination: LatLon?,
+    val arrival: LatLon?, val destinationSource: TargetSource?,
+)
+
 data class Imu(val pitchDeg: Double?, val rollDeg: Double?, val pressureHpa: Double?)
 
 enum class TelemetryMode { OFF, AUTO, MANUAL, UNKNOWN }
@@ -245,6 +265,42 @@ object TurtleCodec {
         if (b.size < 10) return null
         val x = le(b)
         return Environment(x10i(x.i16()), x10u(x.u16()), x10i(x.i16()), x10i(x.i16()), x10u(x.u16()))
+    }
+
+    fun journey(b: ByteArray): JourneyInfo? {
+        if (b.size < 16) return null
+        val x = le(b)
+        val id = x.u32()
+        val lat = e7(x.int); val lon = e7(x.int)
+        val last = x.u32()
+        return JourneyInfo(id.takeIf { it != 0L }, if (lat != null && lon != null) LatLon(lat, lon) else null,
+            last.takeIf { it != 0L })
+    }
+
+    /** JOURNEY_LIST OK payload → (count, journey), or null if too short. */
+    fun journeyListResult(p: ByteArray): Pair<Int, TurtleJourney>? {
+        if (p.size < 35) return null
+        val x = le(p)
+        val count = x.u8(); x.u8()
+        val id = x.u32(); val ended = x.u32()
+        fun pt(): LatLon? { val a = e7(x.int); val o = e7(x.int); return if (a != null && o != null) LatLon(a, o) else null }
+        val dep = pt(); val dest = pt(); val arr = pt()
+        val src = u8OrNull(x.u8())?.let { TargetSource.entries.getOrNull(it) }
+        return count to TurtleJourney(id, ended.takeIf { it != 0L }, dep, dest, arr, src)
+    }
+
+    /** JOURNEY_TRACK OK payload → one page, or null if too short. */
+    fun journeyTrackResult(p: ByteArray): TrackPage? {
+        if (p.size < 5) return null
+        val x = le(p)
+        val total = x.u16(); val start = x.u16(); val n = x.u8()
+        if (p.size < 5 + n * 13) return null
+        val pts = (0 until n).mapNotNull {
+            val t = x.u32(); val lat = e7(x.int); val lon = e7(x.int); val s = x.u8()
+            if (lat == null || lon == null) null
+            else TrackPoint(t, lat, lon, if (s == NA_U8) null else NavState.entries.getOrNull(s))
+        }
+        return TrackPage(total, start, n, pts)
     }
 
     fun shore(b: ByteArray): Shore? {

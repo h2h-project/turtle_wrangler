@@ -16,6 +16,16 @@ Hope Turtles running turtleOS. The firmware lives next door at
 - **Visual identity:** the palette in `ui/theme/Theme.kt` comes from
   hopeturtles.org. Green is the base (the landing green for top-level
   chrome); pink and fuchsia are the app's accent colours, used freely.
+  Fuchsia marks priority items (live bullets, sparklines, confirm
+  buttons); red (`Wrangler.Danger`) is only for the danger zone.
+- **Dark mode:** `Wrangler.X` follows the theme (`LightPalette` /
+  `DarkPalette`, the site's `[data-theme="dark"]` neutrals, with
+  `#006900` as the main green for the splash, top bar and Settings).
+  Never hard-code a light colour for themed UI; read `Wrangler.X` (in a
+  Canvas, read `LocalWranglerPalette.current` before it). The map
+  and anything on a fixed white background use `Brand.X`, which doesn't
+  change. The Settings sun/moon switch sets the app's night mode via
+  `UiModeManager`, and the manifest handles `uiMode` without a restart.
 
 ## Layout
 
@@ -33,6 +43,8 @@ app/src/main/java/org/hopeturtles/wrangler/
 │   └── Payloads.kt        command payload encoders + OK-result payload decoders
 ├── data/LastSeenStore.kt  per-turtle "last seen" cache (never shown as live)
 ├── data/StampLogStore.kt  per-turtle GPS stamp log (GPS tab), Stamped → Sent
+├── data/JourneyStore.kt   per-turtle journey log: what the phone saw + the turtle's own
+│                          records (JOURNEY_LIST/TRACK, turtleOS 2.6.0), merged by journey_id
 └── ui/                    Compose screens + theme
 app/src/test/              JVM unit tests (decoders vs real Applemore bytes)
 ```
@@ -46,6 +58,11 @@ app/src/test/              JVM unit tests (decoders vs real Applemore bytes)
 - **minSdk 31 < API 33:** implement both the byte-array GATT callbacks and
   write calls (33+) and the deprecated ones; ignore the deprecated
   callbacks on 33+ to avoid double delivery (see `TurtleConnection`).
+- **Battery current sign:** `current_mA` (Power `0113`) is the INA219's
+  raw reading, **negative = charging**, as on the turtle's OLED and in
+  the telemetry JSON (`ina_current_ma`). `Power.currentMa` keeps that raw
+  sign; convert only where it's shown (`Format.charge()` for the word,
+  the battery graph plots −mA so charging is up).
 - **Sentinels are "no data":** decoders return null, and the UI shows "—".
   Accept values longer than the contract says (ignore the tail), reject
   shorter ones.
@@ -60,6 +77,12 @@ app/src/test/              JVM unit tests (decoders vs real Applemore bytes)
   command is in flight (the firmware runs one at a time).
 - **The map is the only internet use** (OpenFreeMap tiles, no key). Never
   use the phone's location; the BLE permission text promises that.
+- **Journeys merge by `journey_id`.** Facts the turtle stamps (departure,
+  end time, arrival, destination) beat the phone's guesses
+  (`JourneyRecord.withTurtle`); a route is the time-ordered union of the
+  turtle's points and the phone's (`withTurtlePoints`). The sync
+  (`WranglerViewModel.syncJourneys`) is quiet: no notice, no busy state.
+  Turtles before 2.6.0 (no `0119`) keep the phone-only log.
 - **Public repo:** no keystores, `local.properties`, API keys or turtle
   credentials in git (see `.gitignore`).
 

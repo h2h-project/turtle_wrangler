@@ -102,7 +102,7 @@ fun BatteryGraphScreen(name: String?, samples: List<BattSample>, live: Boolean, 
                 Text(
                     listOfNotNull(Format.volts(s.mv), Format.chargeWord(Format.charge(s.ma)),
                         Format.current(s.ma), s.soc?.let { "$it%" }).joinToString(" · "),
-                    fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold, color = Wrangler.Ink, fontSize = 16.sp,
                 )
             }
 

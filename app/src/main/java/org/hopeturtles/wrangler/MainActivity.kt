@@ -12,6 +12,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -33,6 +34,7 @@ import org.hopeturtles.wrangler.ui.CardLabel
 import org.hopeturtles.wrangler.ui.GreenOutlineButton
 import org.hopeturtles.wrangler.ui.BatteryGraphScreen
 import org.hopeturtles.wrangler.ui.BottleGraphScreen
+import org.hopeturtles.wrangler.ui.JourneyReviewScreen
 import org.hopeturtles.wrangler.ui.LiveMapScreen
 import org.hopeturtles.wrangler.ui.MapPickerScreen
 import org.hopeturtles.wrangler.ui.RunCommand
@@ -62,15 +64,20 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Every screen's top is the landing green: white status-bar icons.
-        // The bottom (tab bar, cards) is light: dark navigation-bar icons.
-        enableEdgeToEdge(
-            statusBarStyle = SystemBarStyle.dark(android.graphics.Color.TRANSPARENT),
-            navigationBarStyle = SystemBarStyle.light(android.graphics.Color.TRANSPARENT,
-                android.graphics.Color.TRANSPARENT),
-        )
         setContent {
-            WranglerTheme {
+            // The manifest keeps uiMode changes in place (no restart), so the
+            // bars follow the theme from here.
+            val dark = isSystemInDarkTheme()
+            LaunchedEffect(dark) {
+                // Every screen's top is the landing green: white status-bar icons.
+                // The bottom (tab bar, cards) follows the theme.
+                val clear = android.graphics.Color.TRANSPARENT
+                enableEdgeToEdge(
+                    statusBarStyle = SystemBarStyle.dark(clear),
+                    navigationBarStyle = if (dark) SystemBarStyle.dark(clear) else SystemBarStyle.light(clear, clear),
+                )
+            }
+            WranglerTheme(dark) {
                 // The splash covers the app while it starts underneath, then fades away.
                 // Saveable: a rotation or theme change doesn't replay it.
                 var splash by rememberSaveable { mutableStateOf(true) }
@@ -161,7 +168,8 @@ private fun Main(vm: WranglerViewModel) {
         var pickFrom by remember { mutableStateOf<LatLon?>(null) }
         var journeySetup by rememberSaveable { mutableStateOf(false) }
         val trail by vm.trail.collectAsStateWithLifecycle()
-        val departures by vm.departures.collectAsStateWithLifecycle()
+        val journeys by vm.journeys.collectAsStateWithLifecycle()
+        var review by rememberSaveable { mutableStateOf<Long?>(null) }
         val run: RunCommand = { label, op, payload, onResult -> vm.command(label, op, payload, onResult = onResult) }
         val quietRun: RunCommand = { label, op, payload, onResult ->
             vm.command(label, op, payload, quiet = true, onResult = onResult)
@@ -173,8 +181,14 @@ private fun Main(vm: WranglerViewModel) {
             return
         }
         if (showLiveMap) {
-            LiveMapScreen(tel, trail, departures, stampLog, canPick = canCommand,
+            LiveMapScreen(tel, trail, journeys, stampLog, canPick = canCommand,
                 onPick = { pickFrom = it; showMap = true }, onBack = { showLiveMap = false })
+            return
+        }
+        val reviewed = review?.let { id -> journeys.find { it.id == id } }
+        if (reviewed != null) {
+            JourneyReviewScreen(reviewed, stampLog.filter { it.journeyId == reviewed.id },
+                onBack = { review = null })
             return
         }
         if (showBattery) {
@@ -195,9 +209,11 @@ private fun Main(vm: WranglerViewModel) {
             onPickOnMap = { showMap = true },
             onServo = vm::servoTo,
             trail = trail,
-            departures = departures,
+            journeys = journeys,
             onOpenMap = { showLiveMap = true },
             onStartJourney = vm::startJourney,
+            onEndJourney = vm::endJourney,
+            onReviewJourney = { review = it },
             journeySetup = journeySetup,
             onJourneySetup = { journeySetup = it },
             stampLog = stampLog,

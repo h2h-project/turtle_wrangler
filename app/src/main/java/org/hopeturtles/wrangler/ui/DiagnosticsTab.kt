@@ -171,7 +171,7 @@ fun DiagnosticsTab(
     if (busy == BENCH_SWEEP) {
         AlertDialog(
             onDismissRequest = {},
-            title = { Text("Bench sweep running…", fontWeight = FontWeight.Bold, color = Wrangler.Dark) },
+            title = { Text("Bench sweep running…", fontWeight = FontWeight.Bold, color = Wrangler.Ink) },
             text = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     CircularProgressIndicator(Modifier.size(20.dp), color = Wrangler.Primary, strokeWidth = 2.dp)

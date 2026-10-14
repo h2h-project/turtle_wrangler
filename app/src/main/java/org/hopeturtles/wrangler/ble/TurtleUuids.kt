@@ -30,10 +30,12 @@ object TurtleUuids {
     val SHORE: UUID = of(0x0117)
     /** Added within v1 (2026-10-04): optional — older firmware lacks it. */
     val ENVIRONMENT: UUID = of(0x0118)
+    /** Added within v1 (turtleOS 2.6.0): optional, like ENVIRONMENT. */
+    val JOURNEY: UUID = of(0x0119)
 
     /** The read + notify characteristics, in contract order. Missing ones
      *  (e.g. ENVIRONMENT on older firmware) are skipped by the connection. */
-    val TELEMETRY = listOf(POSITION, NAV, TARGETS, SAIL, POWER, IMU, STATUS, SHORE, ENVIRONMENT)
+    val TELEMETRY = listOf(POSITION, NAV, TARGETS, SAIL, POWER, IMU, STATUS, SHORE, ENVIRONMENT, JOURNEY)
 
     // Command service
     val COMMAND: UUID = of(0x0201)

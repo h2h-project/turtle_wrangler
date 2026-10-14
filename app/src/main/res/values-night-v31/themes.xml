@@ -1,0 +1,9 @@
+<resources>
+    <!-- Dark mode (the app's night mode: the phone's, or the Settings switch).
+         Matches ui/theme/Theme.kt DarkPalette: background and main green. -->
+    <style name="Theme.Wrangler" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">#FF121417</item>
+        <item name="android:windowSplashScreenBackground">#FF006900</item>
+        <item name="android:windowSplashScreenAnimatedIcon">@android:color/transparent</item>
+    </style>
+</resources>

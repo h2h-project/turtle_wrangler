@@ -29,10 +29,11 @@ import org.hopeturtles.wrangler.ble.CommandResult
 import org.hopeturtles.wrangler.ble.LatLon
 import org.hopeturtles.wrangler.ble.Op
 import org.hopeturtles.wrangler.ble.Payloads
-import org.hopeturtles.wrangler.ble.ResultCode
 import org.hopeturtles.wrangler.ble.TargetSource
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
+import org.hopeturtles.wrangler.data.JourneyRecord
 import org.hopeturtles.wrangler.data.StampEntry
+import org.hopeturtles.wrangler.ui.theme.LocalWranglerPalette
 import org.hopeturtles.wrangler.ui.theme.Wrangler
 import kotlin.math.abs
 import kotlin.math.max
@@ -61,10 +62,12 @@ fun NavigateTab(
     onPickOnMap: () -> Unit,
     onServo: (Int) -> Unit,
     trail: List<LatLon>,
-    departures: Map<Long, LatLon>,
+    journeys: List<JourneyRecord>,
     stamps: List<StampEntry>,
     onOpenMap: () -> Unit,
     onStartJourney: () -> Unit,
+    onEndJourney: () -> Unit,
+    onReviewJourney: (Long) -> Unit,
     setupOpen: Boolean,
     onSetupOpen: (Boolean) -> Unit,
 ) {
@@ -81,12 +84,13 @@ fun NavigateTab(
     ) {
         NoticeCard(notice, busy)
         if (!live) Muted("Not live — values are the last ones received.")
-        JourneyPanel(tel, enabled, trail, departures, stamps, onOpenMap,
+        JourneyPanel(tel, enabled, trail, journeys, stamps, onOpenMap,
             onStart = { onSetupOpen(true) }, onEnd = { ask = Ask.END })
         ServoDial(tel.sail, tel.status?.servoPresent, canCommand, onServo)
         CourseCard(tel)
         DestinationCard(tel, here, enabled, onPickOnMap, onAsk = { ask = it })
         if (!canCommand) Muted("Commands are unavailable on this link (see Diagnostics).")
+        JourneyLogCard(journeys, onReviewJourney)
     }
 
     // The modal first, so the confirmations below open over it.
@@ -148,17 +152,7 @@ fun NavigateTab(
             body = "The turtle stamps its arrival point from its GPS. Without a fix the journey still ends, " +
                 "but no arrival point is recorded.",
             confirm = "End journey",
-            onConfirm = {
-                run("End journey", Op.JOURNEY_END, ByteArray(0)) { r ->
-                    when {
-                        r.code.ok && Payloads.arrivalStamped(r.payload) == false ->
-                            say("Journey ended — arrival point not recorded (no GPS).", true)
-                        r.code.ok -> say("Journey ended. Arrival point recorded.", true)
-                        r.code == ResultCode.WRONG_STATE -> say("No journey is open on the turtle.", false)
-                        else -> say("Couldn't end the journey: ${r.message}", false)
-                    }
-                }
-            },
+            onConfirm = onEndJourney,
             onDismiss = { ask = null },
         )
         null -> {}
@@ -173,7 +167,7 @@ private fun CourseCard(tel: TurtleTelemetry) {
     WCard {
         CardLabel("Course")
         Text(Format.distance(nav?.distToTargetM) ?: "—", fontSize = 30.sp, fontWeight = FontWeight.Bold,
-            color = Wrangler.Dark)
+            color = Wrangler.Ink)
         Muted(if (nav?.distToTargetM != null) "to the active target" else "No distance — no target or no fix")
         Field("Bearing to target", Format.heading(nav?.bearingToTargetDeg))
         Field("Heading", Format.heading(nav?.headingDeg))
@@ -202,15 +196,16 @@ private fun XteGauge(xteM: Int?) {
     val range = max(25, niceCeil((abs(xteM ?: 0) * 1.25).toInt()))
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text("L", color = Wrangler.TextMuted, fontSize = 12.sp)
+        val pal = LocalWranglerPalette.current   // read here: a Canvas draws outside composition
         Canvas(Modifier.weight(1f).height(28.dp).padding(horizontal = 8.dp)) {
             val y = size.height / 2
-            drawLine(Wrangler.CardBorder, Offset(0f, y), Offset(size.width, y), 4.dp.toPx(), StrokeCap.Round)
+            drawLine(pal.cardBorder, Offset(0f, y), Offset(size.width, y), 4.dp.toPx(), StrokeCap.Round)
             val cx = size.width / 2
-            drawLine(Wrangler.TextMuted, Offset(cx, y - 8.dp.toPx()), Offset(cx, y + 8.dp.toPx()), 2.dp.toPx())
+            drawLine(pal.textMuted, Offset(cx, y - 8.dp.toPx()), Offset(cx, y + 8.dp.toPx()), 2.dp.toPx())
             if (xteM != null) {
                 val x = cx + (xteM.toFloat() / range).coerceIn(-1f, 1f) * (size.width / 2)
-                drawCircle(Wrangler.Primary, 7.dp.toPx(), Offset(x, y))
-                drawCircle(Wrangler.Surface, 7.dp.toPx(), Offset(x, y), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
+                drawCircle(pal.primary, 7.dp.toPx(), Offset(x, y))
+                drawCircle(pal.surface, 7.dp.toPx(), Offset(x, y), style = androidx.compose.ui.graphics.drawscope.Stroke(2.dp.toPx()))
             }
         }
         Text("R", color = Wrangler.TextMuted, fontSize = 12.sp)
@@ -265,7 +260,7 @@ private fun DestinationCard(
 private fun TargetRow(label: String, p: LatLon?, here: LatLon?, active: Boolean, none: String) {
     Column(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(label, fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 14.sp,
+            Text(label, fontWeight = FontWeight.Bold, color = Wrangler.Ink, fontSize = 14.sp,
                 modifier = Modifier.weight(1f))
             if (active) Text("● Active", color = Wrangler.Primary, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         }

@@ -71,4 +71,11 @@ class FormatTest {
         assertEquals("7 m left of track", Format.xte(-7))
         assertNull(Format.xte(null))
     }
+
+    @Test fun batteryBands_matchTheTurtlesIcon() {
+        // turtleOS glyphs.battery_bands: one bar per 20 %, never 0.
+        assertEquals(listOf(1, 1, 1, 2, 2, 3, 4, 4, 5, 5),
+            listOf(0, 1, 20, 21, 40, 41, 61, 80, 81, 100).map { Format.batteryBands(it) })
+        assertNull(Format.batteryBands(null))
+    }
 }

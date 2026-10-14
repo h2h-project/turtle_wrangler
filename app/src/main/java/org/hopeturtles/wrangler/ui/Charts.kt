@@ -21,6 +21,7 @@ import androidx.compose.ui.text.drawText
 import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.hopeturtles.wrangler.ui.theme.LocalWranglerPalette
 import org.hopeturtles.wrangler.ui.theme.Wrangler
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -85,6 +86,7 @@ fun LineChart(
     lo -= pad; hi += pad
     val span = (t1 - t0).coerceAtLeast(1L)
 
+    val pal = LocalWranglerPalette.current   // read here: a Canvas draws outside composition
     Canvas(modifier.fillMaxWidth().height(170.dp).padding(top = 8.dp)) {
         val plotW = size.width - AXIS_W
         val plotH = size.height - AXIS_H
@@ -95,11 +97,11 @@ fun LineChart(
         for (k in 0..2) {
             val v = lo + (hi - lo) * k / 2
             val yy = y(v)
-            drawLine(Wrangler.CardBorder, Offset(AXIS_W, yy), Offset(size.width, yy), 1f)
+            drawLine(pal.cardBorder, Offset(AXIS_W, yy), Offset(size.width, yy), 1f)
             label(measurer, yLabel(v), labelStyle, Offset(0f, yy - 16f))
         }
         if (zeroLine && lo < 0 && hi > 0) {
-            drawLine(Wrangler.TextMuted, Offset(AXIS_W, y(0.0)), Offset(size.width, y(0.0)), 2f,
+            drawLine(pal.textMuted, Offset(AXIS_W, y(0.0)), Offset(size.width, y(0.0)), 2f,
                 pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 8f)))
         }
         // Time labels: start, middle, end
@@ -117,14 +119,14 @@ fun LineChart(
             if (!pen) path.moveTo(x(t), y(v)) else path.lineTo(x(t), y(v))
             pen = true
         }
-        drawPath(path, Wrangler.Primary, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round))
+        drawPath(path, pal.primary, style = Stroke(2.dp.toPx(), cap = StrokeCap.Round))
         // Crosshair
         selT?.let { st ->
             val xx = x(st)
-            drawLine(Wrangler.Dark, Offset(xx, 0f), Offset(xx, plotH), 2f)
+            drawLine(pal.ink, Offset(xx, 0f), Offset(xx, plotH), 2f)
             data.firstOrNull { it.first == st }?.second?.let { v ->
-                drawCircle(Wrangler.Surface, 7f, Offset(xx, y(v)))
-                drawCircle(Wrangler.Primary, 5f, Offset(xx, y(v)))
+                drawCircle(pal.surface, 7f, Offset(xx, y(v)))
+                drawCircle(pal.primary, 5f, Offset(xx, y(v)))
             }
         }
     }

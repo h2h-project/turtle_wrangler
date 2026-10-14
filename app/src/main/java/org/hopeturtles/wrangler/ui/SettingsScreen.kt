@@ -43,11 +43,20 @@ import org.hopeturtles.wrangler.ble.Payloads
 import org.hopeturtles.wrangler.ble.ResultCode
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
 import org.hopeturtles.wrangler.ui.theme.Wrangler
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Icon
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import org.hopeturtles.wrangler.R
+import org.hopeturtles.wrangler.ui.theme.setDarkMode
 
 private enum class SettingsAsk { BLE_OFF, SLEEP, REBOOT, AIROS }
 
 /**
- * Settings (app plan Phase 6), opened from the top-bar gear. Shore WiFi,
+ * Settings (app plan Phase 6), opened from the top-bar gear. Appearance, shore WiFi,
  * the shore link, Bluetooth lockdown, Device and the danger zone. The
  * WiFi password is write-only: the turtle only ever reports the SSID.
  */
@@ -78,6 +87,7 @@ fun SettingsScreen(
         Modifier.fillMaxSize().background(Wrangler.SettingsBackground).padding(16.dp).verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        AppearanceCard()
         NoticeCard(notice, busy)
 
         WifiCard(tel, enabled, ssid, ssidKnown,
@@ -136,7 +146,7 @@ fun SettingsScreen(
         DeviceCard(tel)
 
         WCard {
-            CardLabel("Danger zone")
+            Text("Danger zone", fontWeight = FontWeight.Bold, color = Wrangler.Danger, fontSize = 15.sp)
             Muted("Each of these ends the connection.")
             Spacer(Modifier.height(8.dp))
             DangerButton("Put the turtle to sleep", enabled) { ask = SettingsAsk.SLEEP }
@@ -184,6 +194,29 @@ fun SettingsScreen(
     }
 }
 
+/** Light or dark: sun, switch, moon. The phone's own setting until this is flipped. */
+@Composable
+private fun AppearanceCard() {
+    val ctx = LocalContext.current
+    val dark = isSystemInDarkTheme()
+    WCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Appearance", fontWeight = FontWeight.Bold, color = Wrangler.Ink, fontSize = 15.sp,
+                modifier = Modifier.weight(1f))
+            Icon(painterResource(R.drawable.ic_sun), contentDescription = null,
+                tint = if (dark) Wrangler.TextMuted else Wrangler.Primary, modifier = Modifier.size(22.dp))
+            Switch(
+                checked = dark, onCheckedChange = { setDarkMode(ctx, it) },
+                colors = SwitchDefaults.colors(checkedTrackColor = Wrangler.Primary),
+                modifier = Modifier.padding(horizontal = 8.dp)
+                    .semantics { contentDescription = "Dark mode" },
+            )
+            Icon(painterResource(R.drawable.ic_moon), contentDescription = null,
+                tint = if (dark) Wrangler.Ink else Wrangler.TextMuted, modifier = Modifier.size(20.dp))
+        }
+    }
+}
+
 @Composable
 private fun WifiCard(
     tel: TurtleTelemetry, enabled: Boolean, ssid: String?, ssidKnown: Boolean,
@@ -196,7 +229,7 @@ private fun WifiCard(
     var show by remember { mutableStateOf(false) }
     WCard {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Shore WiFi", fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 15.sp,
+            Text("Shore WiFi", fontWeight = FontWeight.Bold, color = Wrangler.Ink, fontSize = 15.sp,
                 modifier = Modifier.weight(1f))
             Switch(
                 checked = st?.wifiEnabled == true, onCheckedChange = onWifi,
@@ -267,7 +300,7 @@ private fun ShoreLinkCard(
     var intervalText by remember(st?.intervalS) { mutableStateOf(st?.intervalS?.toString() ?: "") }
     WCard {
         CardLabel("Shore link")
-        Text("When the turtle looks for WiFi", color = Wrangler.Dark, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text("When the turtle looks for WiFi", color = Wrangler.Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(ConnectionMode.WIFI_AUTO to "Automatically", ConnectionMode.WIFI_MANUAL to "Only when asked")
                 .forEach { (m, label) ->
@@ -291,7 +324,7 @@ private fun ShoreLinkCard(
         })
 
         Spacer(Modifier.height(10.dp))
-        Text("Logging interval", color = Wrangler.Dark, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+        Text("Logging interval", color = Wrangler.Ink, fontSize = 14.sp, fontWeight = FontWeight.Bold)
         val secs = intervalText.toIntOrNull()
         val valid = secs != null && secs in 10..65_535
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -329,14 +362,14 @@ private fun DeviceCard(tel: TurtleTelemetry) {
     }
 }
 
-/** Plain dark outline: these end the connection, so they shouldn't look like routine actions. */
+/** Red outline: these end the connection, so they shouldn't look like routine actions. */
 @Composable
 private fun DangerButton(text: String, enabled: Boolean, onClick: () -> Unit) {
     OutlinedButton(
         onClick = onClick, enabled = enabled, modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-        border = BorderStroke(1.dp, if (enabled) Wrangler.Dark else Wrangler.CardBorder),
+        border = BorderStroke(1.dp, if (enabled) Wrangler.Danger else Wrangler.CardBorder),
     ) {
-        Text(text, color = if (enabled) Wrangler.Dark else Wrangler.TextMuted, fontWeight = FontWeight.Bold)
+        Text(text, color = if (enabled) Wrangler.Danger else Wrangler.TextMuted, fontWeight = FontWeight.Bold)
     }
 }
 

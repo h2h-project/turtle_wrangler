@@ -132,7 +132,7 @@ private fun StampCard(
         CardLabel("Stamp the turtle's position")
         Text(
             Format.latLon(p?.lat, p?.lon) ?: "No fix",
-            color = if (stale) Wrangler.TextMuted else Wrangler.Dark,
+            color = if (stale) Wrangler.TextMuted else Wrangler.Ink,
             fontWeight = FontWeight.Bold, fontSize = 18.sp,
         )
         Field("Satellites", p?.sats?.toString())
@@ -155,7 +155,7 @@ private fun StampCard(
                     modifier = Modifier.fillMaxWidth().height(72.dp),
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Wrangler.Primary, contentColor = Color.White,
-                        disabledContainerColor = Wrangler.Light, disabledContentColor = Wrangler.Dark,
+                        disabledContainerColor = Wrangler.Light, disabledContentColor = Wrangler.Ink,
                     ),
                 ) {
                     Text("Stamp position", fontWeight = FontWeight.Bold, fontSize = 22.sp)
@@ -199,7 +199,7 @@ private fun ShoreCard(tel: TurtleTelemetry) {
                 1 -> "1 reading waiting to send"
                 else -> "$q readings waiting to send"
             },
-            color = if (q == 0) Wrangler.Primary else Wrangler.Dark, fontWeight = FontWeight.Bold, fontSize = 16.sp,
+            color = if (q == 0) Wrangler.Primary else Wrangler.Ink, fontWeight = FontWeight.Bold, fontSize = 16.sp,
         )
         Field("Last sent to hopeturtles.org", tel.shore?.lastShoreSync?.let { stampTime(it * 1000, true) }
             ?: if (tel.shore != null) "Never" else null)
@@ -253,7 +253,7 @@ private fun StampRow(e: StampEntry) {
                     !e.hasPosition -> "Stamped — no position"
                     else -> "Stamped"
                 } + (e.stampsSession?.let { " #$it" } ?: ""),
-                color = if (e.ok) Wrangler.Dark else Wrangler.PinkDark,
+                color = if (e.ok) Wrangler.Ink else Wrangler.PinkDark,
                 fontWeight = FontWeight.Bold, fontSize = 14.sp, modifier = Modifier.weight(1f),
             )
             if (e.ok) Text(
@@ -297,7 +297,7 @@ private fun ModeCard(st: Status?, enabled: Boolean, onMode: (TelemetryMode) -> U
                             disabledContainerColor = if (on) Wrangler.Primary else Color.Transparent,
                         ),
                     ) {
-                        Text(label, color = if (on) Color.White else Wrangler.Dark, fontWeight = FontWeight.Bold)
+                        Text(label, color = if (on) Color.White else Wrangler.Ink, fontWeight = FontWeight.Bold)
                     }
                 }
         }
@@ -328,7 +328,7 @@ private fun GpsModuleCard(st: Status?, enabled: Boolean, onGps: (Boolean) -> Uni
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(if (st.gpsEnabled) "GPS on" else "GPS off", fontWeight = FontWeight.Bold,
-                    color = Wrangler.Dark, fontSize = 15.sp)
+                    color = Wrangler.Ink, fontSize = 15.sp)
                 Muted(if (st.gpsFixed) "Has a fix" else "No fix")
             }
             Switch(

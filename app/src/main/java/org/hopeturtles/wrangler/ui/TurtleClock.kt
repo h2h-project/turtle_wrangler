@@ -111,7 +111,7 @@ fun SecureModeCard(tel: TurtleTelemetry, enabled: Boolean, onSecureMode: (Boolea
     WCard {
         val on = s.secureMode || s.secureModeBlocked
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Secure mode", fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 15.sp,
+            Text("Secure mode", fontWeight = FontWeight.Bold, color = Wrangler.Ink, fontSize = 15.sp,
                 modifier = Modifier.weight(1f))
             // Asks first; the switch only moves once the turtle reports the change.
             Switch(

@@ -45,7 +45,9 @@ import org.hopeturtles.wrangler.ble.LatLon
 import org.hopeturtles.wrangler.ble.TargetSource
 import org.hopeturtles.wrangler.ble.Targets
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
+import org.hopeturtles.wrangler.data.JourneyRecord
 import org.hopeturtles.wrangler.data.StampEntry
+import org.hopeturtles.wrangler.ui.theme.Brand
 import org.hopeturtles.wrangler.ui.theme.Wrangler
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -89,12 +91,12 @@ fun turtleAt(tel: TurtleTelemetry): LatLon? =
  * is open, also its departure and planned leg, and only its own stamps.
  */
 fun liveScene(
-    tel: TurtleTelemetry, trail: List<LatLon>, departures: Map<Long, LatLon>, stamps: List<StampEntry>,
+    tel: TurtleTelemetry, trail: List<LatLon>, journeys: List<JourneyRecord>, stamps: List<StampEntry>,
 ): MapScene {
     val turtle = turtleAt(tel)
     val active = activeTarget(tel.targets)
     val jid = openJourney(tel)
-    val dep = jid?.let { departures[it] }
+    val dep = jid?.let { id -> journeys.find { it.id == id }?.departure }
     return turtleScene(tel).copy(
         set = tel.targets?.set, mission = tel.targets?.mission, active = active,
         course = turtle != null && active != null,
@@ -117,7 +119,7 @@ fun JourneyPanel(
     tel: TurtleTelemetry,
     enabled: Boolean,
     trail: List<LatLon>,
-    departures: Map<Long, LatLon>,
+    journeys: List<JourneyRecord>,
     stamps: List<StampEntry>,
     onOpenMap: () -> Unit,
     onStart: () -> Unit,
@@ -126,15 +128,15 @@ fun JourneyPanel(
     val known = tel.status != null
     val jid = openJourney(tel)
     val live = jid != null
-    val scene = if (live) liveScene(tel, trail, departures, stamps)
+    val scene = if (live) liveScene(tel, trail, journeys, stamps)
         else turtleScene(tel)
     WCard {
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-            Text("Journey", fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 15.sp,
+            Text("Journey", fontWeight = FontWeight.Bold, color = Wrangler.Ink, fontSize = 15.sp,
                 modifier = Modifier.weight(1f))
             when {
                 !known -> Pill("Waiting…", Wrangler.TextMuted, Wrangler.CardBorder)
-                live -> Pill("● Live", Color.White, Wrangler.PinkDark)
+                live -> Pill("● Live", Color.White, Wrangler.Fuchsia)
                 else -> Pill("No journey", Wrangler.TextMuted, Wrangler.CardBorder)
             }
         }
@@ -163,7 +165,7 @@ fun JourneyPanel(
             Spacer(Modifier.height(8.dp))
             GreenOutlineButton("End journey", onEnd, enabled = enabled)
         } else {
-            Text("No journey open", fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 16.sp)
+            Text("No journey open", fontWeight = FontWeight.Bold, color = Wrangler.Ink, fontSize = 16.sp)
             Muted("A journey runs from a departure to a destination. The turtle stamps its departure " +
                 "point and tags every reading until you end it.")
             Spacer(Modifier.height(8.dp))
@@ -188,24 +190,28 @@ fun MapFrame(scene: MapScene, grey: Boolean, onOpen: () -> Unit, modifier: Modif
             scene.stale -> "fix ${scene.fixAgeS ?: "?"} s old"
             else -> null
         }
-        note?.let { Pill(it, Wrangler.Dark, Color.White.copy(alpha = 0.9f), Modifier.align(Alignment.TopStart).padding(8.dp)) }
-        Pill("Open map ›", Wrangler.Dark, Color.White.copy(alpha = 0.9f),
+        note?.let { Pill(it, Brand.Dark, Color.White.copy(alpha = 0.9f), Modifier.align(Alignment.TopStart).padding(8.dp)) }
+        Pill("Open map ›", Brand.Dark, Color.White.copy(alpha = 0.9f),
             Modifier.align(Alignment.BottomEnd).padding(8.dp))
     }
 }
 
-/** Key to the journey map's marks: shape as well as colour. */
+/**
+ * Key to the journey map's marks: shape as well as colour. [past]: a logged
+ * journey, where the target is its destination and the trail its route.
+ */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun Legend(scene: MapScene) {
+fun Legend(scene: MapScene, past: Boolean = false) {
     FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-        LegendDot("Turtle", TURTLE_C)
+        if (scene.turtle != null) LegendDot("Turtle", TURTLE_C)
         if (scene.departure != null) LegendDot("Departure", DEPARTURE_C)
-        if (scene.set != null) LegendDot("Your target", SET_C)
+        if (scene.arrival != null) LegendDot("Arrival", ARRIVAL_C)
+        if (scene.set != null) LegendDot(if (past) "Destination" else "Your target", SET_C)
         if (scene.mission != null) LegendDot("Mission", MISSION_C)
         if (scene.route) LegendLine("Planned leg", ROUTE_COLOR, dashed = true)
         if (scene.course) LegendLine("Course", COURSE_COLOR)
-        if (scene.trail.isNotEmpty()) LegendLine("Trail", TRAIL_COLOR)
+        if (scene.trail.isNotEmpty()) LegendLine(if (past) "Route" else "Trail", TRAIL_COLOR)
         if (scene.stamps.any { it.lat != null && !it.sent }) LegendDot("Stamped", STAMPED_C)
         if (scene.stamps.any { it.lat != null && it.sent }) LegendDot("Sent", SENT_C)
     }
@@ -267,7 +273,7 @@ fun JourneySetupDialog(
                 .verticalScroll(rememberScrollState()).padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Text("Start a journey", fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 20.sp)
+            Text("Start a journey", fontWeight = FontWeight.Bold, color = Wrangler.Ink, fontSize = 20.sp)
             Muted("Set where it leaves from and where it's going. Both must be ticked to start.")
 
             Step(1, "Departure", depOk)
@@ -332,7 +338,7 @@ private fun Step(n: Int, title: String, done: Boolean) {
                 modifier = Modifier.size(16.dp))
             else Text("$n", color = Wrangler.TextMuted, fontSize = 13.sp, fontWeight = FontWeight.Bold)
         }
-        Text("  $title", fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 16.sp)
+        Text("  $title", fontWeight = FontWeight.Bold, color = Wrangler.Ink, fontSize = 16.sp)
     }
 }
 
@@ -355,7 +361,7 @@ private fun ChoiceButton(text: String, checked: Boolean, onClick: () -> Unit, en
         Text(text, fontWeight = FontWeight.Bold, color = when {
             !on -> Wrangler.TextMuted
             pink -> Wrangler.PinkDark
-            else -> Wrangler.Dark
+            else -> Wrangler.Ink
         })
     }
 }

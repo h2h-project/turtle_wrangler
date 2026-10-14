@@ -140,6 +140,8 @@ data class TurtleTelemetry(
     val status: Status? = null,
     val shore: Shore? = null,
     val environment: Environment? = null,
+    /** `0119`, null on firmware before turtleOS 2.6.0. */
+    val journey: JourneyInfo? = null,
     val lastUpdateMs: Long = 0,
 )
 
@@ -483,6 +485,7 @@ class TurtleConnection(private val context: Context, val device: BluetoothDevice
                 TurtleUuids.STATUS -> t.copy(status = TurtleCodec.status(b) ?: t.status)
                 TurtleUuids.SHORE -> t.copy(shore = TurtleCodec.shore(b) ?: t.shore)
                 TurtleUuids.ENVIRONMENT -> t.copy(environment = TurtleCodec.environment(b) ?: t.environment)
+                TurtleUuids.JOURNEY -> t.copy(journey = TurtleCodec.journey(b) ?: t.journey)
                 else -> t
             }.copy(lastUpdateMs = now)
         }

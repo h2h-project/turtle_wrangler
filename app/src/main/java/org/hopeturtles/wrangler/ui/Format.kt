@@ -88,6 +88,13 @@ object Format {
         null -> null
     }
 
+    /**
+     * Bars (1–5) of the battery icon for the turtle's `soc_pct`: one per
+     * 20 %, so 1–20 % is one bar (critical, it blinks) and 81–100 % five.
+     * The same rule as the turtle's OLED icon (turtleOS `glyphs.battery_bands`).
+     */
+    fun batteryBands(pct: Int?): Int? = pct?.let { ((it + 19) / 20).coerceIn(1, 5) }
+
     /** Magnitude only — the Charging / Discharging word carries the direction. */
     fun current(ma: Int?): String? = ma?.let { "${kotlin.math.abs(it)} mA" }
 

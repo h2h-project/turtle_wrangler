@@ -45,6 +45,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.takeOrElse
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -123,9 +124,10 @@ fun WranglerTopBar(
         },
         actions = {
             if (titleEnd) {
-                Text(title, color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp, maxLines = 1,
-                    overflow = TextOverflow.Ellipsis, modifier = Modifier.padding(start = 8.dp).widthIn(max = 140.dp))
                 linkDot?.let { LinkBullet(it) }
+                Text(title, color = Color.White.copy(alpha = 0.85f), fontSize = 15.sp, maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(start = if (linkDot == null) 8.dp else 0.dp).widthIn(max = 140.dp))
             } else Status()
             // Highlighted while Settings is open (it's not a tab, so no tab is).
             IconButton(
@@ -141,10 +143,10 @@ fun WranglerTopBar(
     )
 }
 
-/** The link bullet after the turtle's name: connected, connecting or not. */
+/** The link bullet before the turtle's name: connected, connecting or not. */
 enum class LinkDot { CONNECTED, CONNECTING, OFF }
 
-/** Pink when connected, flashing white while connecting, grey when not. */
+/** Fuchsia when connected (a live bullet), flashing white while connecting, grey when not. */
 @Composable
 private fun LinkBullet(dot: LinkDot) {
     val flash by rememberInfiniteTransition(label = "linkDot").animateFloat(
@@ -152,16 +154,16 @@ private fun LinkBullet(dot: LinkDot) {
         animationSpec = infiniteRepeatable(tween(500), RepeatMode.Reverse), label = "linkDot",
     )
     val (color, desc) = when (dot) {
-        LinkDot.CONNECTED -> Wrangler.Pink to "Connected"
+        LinkDot.CONNECTED -> Wrangler.Fuchsia to "Connected"
         LinkDot.CONNECTING -> Color.White.copy(alpha = flash) to "Connecting"
         LinkDot.OFF -> Color(0xFFB0B7B2) to "Not connected"
     }
-    Box(Modifier.padding(start = 6.dp).size(9.dp).background(color, CircleShape)
+    Box(Modifier.padding(start = 8.dp, end = 6.dp).size(9.dp).background(color, CircleShape)
         .semantics { contentDescription = desc })
 }
 
-/** Card colour; Settings provides its own pale green. */
-val LocalCardColor = staticCompositionLocalOf { Wrangler.Surface }
+/** Card colour; Settings provides its own pale green. Unspecified = the theme's surface. */
+val LocalCardColor = staticCompositionLocalOf { Color.Unspecified }
 
 /** White card with the site's thin green-grey border. */
 @Composable
@@ -169,7 +171,7 @@ fun WCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> 
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(containerColor = LocalCardColor.current),
+        colors = CardDefaults.cardColors(containerColor = LocalCardColor.current.takeOrElse { Wrangler.Surface }),
         border = BorderStroke(1.dp, Wrangler.CardBorder),
     ) {
         Column(Modifier.padding(14.dp), content = content)
@@ -178,17 +180,17 @@ fun WCard(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> 
 
 @Composable
 fun CardLabel(text: String) {
-    Text(text, fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 15.sp)
+    Text(text, fontWeight = FontWeight.Bold, color = Wrangler.Ink, fontSize = 15.sp)
 }
 
 /** A card title with a status pill at the right: green when [ok], pink tint when not. */
 @Composable
 fun CardLabelWithPill(text: String, pill: String?, ok: Boolean) {
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Text(text, fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 15.sp,
+        Text(text, fontWeight = FontWeight.Bold, color = Wrangler.Ink, fontSize = 15.sp,
             modifier = Modifier.weight(1f))
         if (pill != null) Text(
-            pill, color = if (ok) Wrangler.Primary else Wrangler.PinkDark,
+            pill, color = if (ok) Wrangler.Positive else Wrangler.PinkDark,
             fontSize = 12.sp, fontWeight = FontWeight.Bold,
             modifier = Modifier
                 .background(if (ok) Wrangler.Light else Wrangler.PinkTint, RoundedCornerShape(50))
@@ -228,7 +230,7 @@ fun GreenOutlineButton(text: String, onClick: () -> Unit, enabled: Boolean = tru
         onClick = onClick, enabled = enabled, modifier = modifier.fillMaxWidth(),
         border = BorderStroke(1.dp, Wrangler.Light),
     ) {
-        Text(text, color = Wrangler.Dark, fontWeight = FontWeight.Bold)
+        Text(text, color = Wrangler.Ink, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -271,12 +273,12 @@ fun NoticeCard(notice: org.hopeturtles.wrangler.Notice?, busy: String?) {
                     Modifier.width(16.dp).height(16.dp), color = Wrangler.Primary, strokeWidth = 2.dp)
                 Spacer(Modifier.width(8.dp))
             }
-            Text(text, color = if (ok) Wrangler.Dark else Wrangler.PinkDark, fontSize = 14.sp)
+            Text(text, color = if (ok) Wrangler.Ink else Wrangler.PinkDark, fontSize = 14.sp)
         }
     }
 }
 
-/** Yes/no before anything that changes where the turtle goes. */
+/** Yes/no before anything that changes where the turtle goes. The yes is fuchsia: a priority action. */
 @Composable
 fun ConfirmDialog(
     title: String, body: String, confirm: String, onConfirm: () -> Unit, onDismiss: () -> Unit,
@@ -284,11 +286,15 @@ fun ConfirmDialog(
 ) {
     androidx.compose.material3.AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text(title, fontWeight = FontWeight.Bold, color = Wrangler.Dark) },
+        title = { Text(title, fontWeight = FontWeight.Bold, color = Wrangler.Ink) },
         text = { Text(body, color = Wrangler.Text) },
         confirmButton = {
-            androidx.compose.material3.TextButton(onClick = { onDismiss(); onConfirm() }) {
-                Text(confirm, color = Wrangler.Primary, fontWeight = FontWeight.Bold)
+            androidx.compose.material3.Button(
+                onClick = { onDismiss(); onConfirm() },
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = Wrangler.Fuchsia, contentColor = Color.White),
+            ) {
+                Text(confirm, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = {
@@ -298,4 +304,46 @@ fun ConfirmDialog(
         },
         containerColor = Wrangler.Surface,
     )
+}
+
+/**
+ * The turtle's battery icon, as on its OLED: an outline with up to five
+ * bars, one per 20 % ([Format.batteryBands]). At one bar (20 % or less) it
+ * blinks, like the turtle's. Null [pct]: the outline only.
+ */
+@Composable
+fun BatteryLevel(pct: Int?, modifier: Modifier = Modifier) {
+    val bands = Format.batteryBands(pct)
+    val critical = bands == 1
+    val pal = org.hopeturtles.wrangler.ui.theme.LocalWranglerPalette.current   // read here: a Canvas draws outside composition
+    val blink by rememberInfiniteTransition(label = "battBlink").animateFloat(
+        initialValue = 1f, targetValue = 0f,
+        animationSpec = infiniteRepeatable(tween(500, easing = { if (it < 0.5f) 0f else 1f }), RepeatMode.Restart),
+        label = "battBlink",
+    )
+    androidx.compose.foundation.Canvas(modifier.width(34.dp).height(17.dp).semantics {
+        contentDescription = pct?.let { "Battery $it percent" } ?: "Battery unknown"
+    }) {
+        val stroke = 2.dp.toPx()
+        val nubW = 3.dp.toPx()
+        val bodyW = size.width - nubW
+        val ink = pal.ink
+        drawRoundRect(ink, topLeft = androidx.compose.ui.geometry.Offset(stroke / 2, stroke / 2),
+            size = androidx.compose.ui.geometry.Size(bodyW - stroke, size.height - stroke),
+            cornerRadius = androidx.compose.ui.geometry.CornerRadius(2.dp.toPx()),
+            style = androidx.compose.ui.graphics.drawscope.Stroke(stroke))
+        val nubH = size.height * 0.45f
+        drawRect(ink, topLeft = androidx.compose.ui.geometry.Offset(bodyW, (size.height - nubH) / 2),
+            size = androidx.compose.ui.geometry.Size(nubW, nubH))
+        val n = bands ?: 0
+        if (n == 0 || (critical && blink < 0.5f)) return@Canvas
+        val pad = stroke + 1.5.dp.toPx()
+        val gap = 1.5.dp.toPx()
+        val barW = (bodyW - 2 * pad - 4 * gap) / 5
+        val fill = if (critical) pal.pinkDark else pal.primary
+        for (i in 0 until n) {
+            drawRect(fill, topLeft = androidx.compose.ui.geometry.Offset(pad + i * (barW + gap), pad),
+                size = androidx.compose.ui.geometry.Size(barW, size.height - 2 * pad))
+        }
+    }
 }

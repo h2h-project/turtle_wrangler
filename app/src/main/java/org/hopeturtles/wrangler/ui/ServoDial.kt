@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.hopeturtles.wrangler.ble.Sail
 import org.hopeturtles.wrangler.ble.SweepState
+import org.hopeturtles.wrangler.ui.theme.LocalWranglerPalette
 import org.hopeturtles.wrangler.ui.theme.Wrangler
 import kotlin.math.atan2
 import kotlin.math.cos
@@ -63,6 +64,7 @@ fun ServoDial(sail: Sail?, servoPresent: Boolean?, enabled: Boolean, onSet: (Int
     WCard {
         CardLabel("Sail servo")
         Box(Modifier.fillMaxWidth().padding(top = 4.dp), contentAlignment = Alignment.BottomCenter) {
+            val pal = LocalWranglerPalette.current   // read here: a Canvas draws outside composition
             Canvas(
                 Modifier.fillMaxWidth().aspectRatio(2.1f).pointerInput(Unit) {
                     awaitEachGesture {
@@ -100,10 +102,10 @@ fun ServoDial(sail: Sail?, servoPresent: Boolean?, enabled: Boolean, onSet: (Int
                 val arcTopLeft = Offset(g.cx - g.r, g.cy - g.r)
                 val arcSize = Size(g.r * 2, g.r * 2)
                 // Track, then the filled part from the 0° end to the position.
-                drawArc(Wrangler.CardBorder, 180f, 180f, false, arcTopLeft, arcSize,
+                drawArc(pal.cardBorder, 180f, 180f, false, arcTopLeft, arcSize,
                     style = Stroke(stroke, cap = StrokeCap.Round))
                 val v = shown?.toFloat()?.coerceIn(0f, 180f)
-                val ink = if (usable) Wrangler.Primary else Wrangler.TextMuted
+                val ink = if (usable) pal.primary else pal.textMuted
                 if (v != null && v > 0f) {
                     drawArc(ink.copy(alpha = 0.35f), 180f, v, false, arcTopLeft, arcSize,
                         style = Stroke(stroke, cap = StrokeCap.Round))
@@ -113,7 +115,7 @@ fun ServoDial(sail: Sail?, servoPresent: Boolean?, enabled: Boolean, onSet: (Int
                     val a = Math.toRadians(180.0 + t)
                     val r1 = g.r - stroke / 2 - 4.dp.toPx()
                     val r2 = r1 - 6.dp.toPx()
-                    drawLine(Wrangler.TextMuted,
+                    drawLine(pal.textMuted,
                         Offset(g.cx + r1 * cos(a).toFloat(), g.cy + r1 * sin(a).toFloat()),
                         Offset(g.cx + r2 * cos(a).toFloat(), g.cy + r2 * sin(a).toFloat()), 1.5.dp.toPx())
                 }
@@ -122,12 +124,12 @@ fun ServoDial(sail: Sail?, servoPresent: Boolean?, enabled: Boolean, onSet: (Int
                     val a = Math.toRadians(180.0 + v)
                     val k = Offset(g.cx + g.r * cos(a).toFloat(), g.cy + g.r * sin(a).toFloat())
                     drawCircle(ink, stroke * 0.95f, k)
-                    drawCircle(Wrangler.Surface, stroke * 0.95f, k, style = Stroke(2.5.dp.toPx()))
+                    drawCircle(pal.surface, stroke * 0.95f, k, style = Stroke(2.5.dp.toPx()))
                 }
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(bottom = 2.dp)) {
                 Text(shown?.let { "${it.roundToInt()}°" } ?: "—", fontSize = 34.sp, fontWeight = FontWeight.Bold,
-                    color = Wrangler.Dark)
+                    color = Wrangler.Ink)
                 Muted("of full travel")
             }
         }

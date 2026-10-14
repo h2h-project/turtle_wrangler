@@ -37,6 +37,7 @@ import org.hopeturtles.wrangler.BattSample
 import org.hopeturtles.wrangler.EnvSample
 import org.hopeturtles.wrangler.ble.NavState
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
+import org.hopeturtles.wrangler.ui.theme.LocalWranglerPalette
 import org.hopeturtles.wrangler.ui.theme.Wrangler
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -84,7 +85,8 @@ fun DashboardTab(
                 MapFrame(turtleScene(tel), grey = false, onOpen = onMap, Modifier.height(200.dp))
             }
             // Tap → full-screen charging graph.
-            Tile("Battery", tel.power?.socPct?.let { "$it%" }, Modifier.clickable(onClick = onBattery)) {
+            Tile("Battery", tel.power?.socPct?.let { "$it%" }, Modifier.clickable(onClick = onBattery),
+                icon = { BatteryLevel(tel.power?.socPct) }) {
                 ChargeLine(tel.power?.currentMa)
                 Muted(listOfNotNull(Format.volts(tel.power?.voltageMv), Format.current(tel.power?.currentMa))
                     .joinToString(" · ").ifEmpty { "—" })
@@ -98,7 +100,7 @@ fun DashboardTab(
                 Muted("Bottle")
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(Format.celsius(env?.airTempC) ?: "—", fontSize = 22.sp,
-                        fontWeight = FontWeight.Bold, color = Wrangler.Dark)
+                        fontWeight = FontWeight.Bold, color = Wrangler.Ink)
                     Spacer(Modifier.size(12.dp))
                     Muted(listOfNotNull(env?.humidityPct?.let { "%.0f%% RH".format(it) },
                         env?.pressureHpa?.let { "%.0f hPa".format(it) }).joinToString(" · ")
@@ -142,10 +144,16 @@ private fun Banner(text: String, fg: androidx.compose.ui.graphics.Color, bg: and
 }
 
 @Composable
-private fun Tile(label: String, value: String?, modifier: Modifier, extra: @Composable () -> Unit) {
+private fun Tile(
+    label: String, value: String?, modifier: Modifier,
+    icon: (@Composable () -> Unit)? = null, extra: @Composable () -> Unit,
+) {
     WCard(modifier) {
         Muted(label)
-        Text(value ?: "—", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Wrangler.Dark)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            icon?.let { it(); Spacer(Modifier.size(10.dp)) }
+            Text(value ?: "—", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Wrangler.Ink)
+        }
         extra()
     }
 }
@@ -164,6 +172,7 @@ private fun HeadingCard(tel: TurtleTelemetry) {
     val sail = tel.sail?.sailDeg
     val labels = rememberTextMeasurer()
     WCard {
+        val pal = LocalWranglerPalette.current   // read here: a Canvas draws outside composition
         Canvas(Modifier.fillMaxWidth().aspectRatio(1f)) {
             val c = Offset(size.width / 2f, size.height / 2f)
             val ringW = 10.dp.toPx()
@@ -178,20 +187,20 @@ private fun HeadingCard(tel: TurtleTelemetry) {
             // Fine ticks outside the ring.
             for (d in 0 until 360 step 2) {
                 val (len, w, ink) = when {
-                    d % 30 == 0 -> Triple(14.dp, 2.5.dp, Wrangler.Dark)
-                    d % 10 == 0 -> Triple(9.dp, 1.5.dp, Wrangler.Dark)
-                    else -> Triple(5.dp, 1.dp, Wrangler.TextMuted)
+                    d % 30 == 0 -> Triple(14.dp, 2.5.dp, pal.ink)
+                    d % 10 == 0 -> Triple(9.dp, 1.5.dp, pal.ink)
+                    else -> Triple(5.dp, 1.dp, pal.textMuted)
                 }
                 drawLine(ink, at(d.toDouble(), tickOuter - len.toPx()), at(d.toDouble(), tickOuter),
                     w.toPx(), cap = StrokeCap.Butt)
             }
-            drawCircle(Wrangler.Dark, r, c, style = Stroke(ringW))
+            drawCircle(pal.ink, r, c, style = Stroke(ringW))
 
             // Cardinal letters just inside the ring.
             val inside = r - ringW / 2f - 14.dp.toPx()
             listOf(0 to "N", 90 to "E", 180 to "S", 270 to "W").forEach { (d, s) ->
                 val m = labels.measure(s, TextStyle(fontSize = 16.sp, fontWeight = FontWeight.Bold,
-                    color = if (d == 0) Wrangler.Dark else Wrangler.TextMuted))
+                    color = if (d == 0) pal.ink else pal.textMuted))
                 val p = at(d.toDouble(), inside)
                 drawText(m, topLeft = Offset(p.x - m.size.width / 2f, p.y - m.size.height / 2f))
             }
@@ -201,15 +210,15 @@ private fun HeadingCard(tel: TurtleTelemetry) {
             // gives the AS5600 angle relative to the boat, zero unstated).
             if (heading != null && sail != null) {
                 val len = r * 0.62f
-                drawLine(Wrangler.TextMuted.copy(alpha = 0.75f), at(heading + sail, len),
+                drawLine(pal.textMuted.copy(alpha = 0.75f), at(heading + sail, len),
                     at(heading + sail + 180.0, len), 6.dp.toPx(), cap = StrokeCap.Round)
             }
 
             heading?.let {
-                drawLine(Wrangler.Primary, c, at(it, r - ringW / 2f - 30.dp.toPx()), 7.dp.toPx(),
+                drawLine(pal.primary, c, at(it, r - ringW / 2f - 30.dp.toPx()), 7.dp.toPx(),
                     cap = StrokeCap.Round)
-                drawCircle(Wrangler.Primary, 8.dp.toPx(), c)
-                drawCircle(Wrangler.Surface, 3.dp.toPx(), c)
+                drawCircle(pal.primary, 8.dp.toPx(), c)
+                drawCircle(pal.surface, 3.dp.toPx(), c)
             }
 
             // Target bearing: a triangle riding the ring, point inward.
@@ -225,13 +234,13 @@ private fun HeadingCard(tel: TurtleTelemetry) {
                     lineTo(base.x - side.x * half, base.y - side.y * half)
                     close()
                 }
-                drawPath(tri, Wrangler.PinkTint)
-                drawPath(tri, Wrangler.PinkDark, style = Stroke(2.5.dp.toPx(), join = StrokeJoin.Round))
+                drawPath(tri, pal.pinkTint)
+                drawPath(tri, pal.pinkDark, style = Stroke(2.5.dp.toPx(), join = StrokeJoin.Round))
             }
         }
         Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             Text(Format.heading(heading) ?: "—", fontSize = 24.sp,
-                fontWeight = FontWeight.Bold, color = Wrangler.Dark)
+                fontWeight = FontWeight.Bold, color = Wrangler.Ink)
             Muted(bearing?.let { "target is ${Format.degrees(it)} · " +
                 (Format.turnText(Format.turn(heading, it)) ?: "") } ?: "no target bearing")
         }
@@ -241,6 +250,7 @@ private fun HeadingCard(tel: TurtleTelemetry) {
 /** Charge (battery) or temperature (bottle) trend for this connection, in the fuchsia accent. */
 @Composable
 private fun Sparkline(values: List<Int>) {
+    val pal = LocalWranglerPalette.current   // read here: a Canvas draws outside composition
     Canvas(Modifier.fillMaxWidth().height(18.dp).padding(top = 4.dp)) {
         val lo = values.min().toFloat()
         val hi = maxOf(values.max().toFloat(), lo + 1f)
@@ -251,6 +261,6 @@ private fun Sparkline(values: List<Int>) {
             val y = size.height - (v - lo) / (hi - lo) * size.height
             if (i == 0) path.moveTo(x, y) else path.lineTo(x, y)
         }
-        drawPath(path, Wrangler.Fuchsia, style = Stroke(3f, cap = StrokeCap.Round))
+        drawPath(path, pal.fuchsia, style = Stroke(3f, cap = StrokeCap.Round))
     }
 }

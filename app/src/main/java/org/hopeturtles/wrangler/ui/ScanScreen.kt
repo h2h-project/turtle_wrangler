@@ -48,6 +48,7 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import org.hopeturtles.wrangler.ble.FoundTurtle
 import org.hopeturtles.wrangler.data.LastSeen
+import org.hopeturtles.wrangler.ui.theme.Brand
 import org.hopeturtles.wrangler.ui.theme.Wrangler
 
 /**
@@ -111,7 +112,7 @@ fun ScanScreen(
                 colors = ButtonDefaults.buttonColors(containerColor = Color.White),
             ) {
                 if (scanning) ScanningLabel()
-                else Text("Scan for Turtles", color = Wrangler.PinkDark, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                else Text("Scan for Turtles", color = Brand.PinkDark, fontWeight = FontWeight.Bold, fontSize = 18.sp)
             }
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
@@ -127,7 +128,7 @@ fun ScanScreen(
     if (serverInfo) {
         AlertDialog(
             onDismissRequest = { serverInfo = false },
-            title = { Text("Connect to Server", fontWeight = FontWeight.Bold, color = Wrangler.Dark) },
+            title = { Text("Connect to Server", fontWeight = FontWeight.Bold, color = Wrangler.Ink) },
             text = { Text("This feature is still in development.", color = Wrangler.Text) },
             confirmButton = {
                 TextButton(onClick = { serverInfo = false }) {
@@ -193,7 +194,7 @@ private fun TurtleRow(t: FoundTurtle, onPick: (FoundTurtle) -> Unit) {
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
-                Text("🐢 ${t.name}", fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 17.sp)
+                Text("🐢 ${t.name}", fontWeight = FontWeight.Bold, color = Wrangler.Ink, fontSize = 17.sp)
                 Text(
                     buildAnnotatedString {
                         withStyle(SpanStyle(color = Wrangler.Fuchsia)) { append("● ") }
@@ -220,7 +221,7 @@ private fun LastSeenCards(lastSeen: List<LastSeen>) {
         items(lastSeen.take(5), key = { it.address }) { s ->
             WCard(Modifier.alpha(0.6f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("🐢 ${s.name}", fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 17.sp,
+                    Text("🐢 ${s.name}", fontWeight = FontWeight.Bold, color = Wrangler.Ink, fontSize = 17.sp,
                         modifier = Modifier.weight(1f))
                     Text(
                         "Not in range", color = Wrangler.TextMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold,

@@ -17,6 +17,8 @@ object Op {
     const val DEST_SET_MISSION = 0x04
     const val DEST_SET_COORDS = 0x05
     const val DEST_CLEAR = 0x06
+    const val JOURNEY_LIST = 0x07             // turtleOS 2.6.0: <B> index → OK <BB> + record
+    const val JOURNEY_TRACK = 0x08            // turtleOS 2.6.0: <IH> id, start → OK <HHB> + points
     const val NAV_LUFF_SWEEP = 0x10
     const val SERVO_BENCH_SWEEP = 0x11
     const val SERVO_SET_ANGLE = 0x12          // added 2026-10-05: <B> 0..180 of full travel

@@ -92,7 +92,7 @@ fun BottleGraphScreen(
                 Text(
                     listOfNotNull(Format.celsius(s.airTempC), s.humidityPct?.let { "%.0f%% RH".format(it) },
                         s.pressureHpa?.let { "%.1f hPa".format(it) }).joinToString(" · ").ifEmpty { "—" },
-                    fontWeight = FontWeight.Bold, color = Wrangler.Dark, fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold, color = Wrangler.Ink, fontSize = 16.sp,
                 )
             }
 
@@ -125,7 +125,7 @@ fun BottleGraphScreen(
 @Composable
 private fun Summary(e: Environment?, samples: List<EnvSample>, live: Boolean) {
     WCard {
-        Text(Format.celsius(e?.airTempC) ?: "—", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Wrangler.Dark)
+        Text(Format.celsius(e?.airTempC) ?: "—", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Wrangler.Ink)
         Muted("Air inside the bottle (AHT21)")
         Field("Humidity", e?.humidityPct?.let { "%.1f%% RH".format(it) })
         Field("Pressure", e?.pressureHpa?.let { "%.1f hPa".format(it) })

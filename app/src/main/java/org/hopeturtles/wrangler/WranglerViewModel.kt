@@ -11,6 +11,7 @@ import android.util.Log
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,10 +29,13 @@ import org.hopeturtles.wrangler.ble.NotStamped
 import org.hopeturtles.wrangler.ble.Op
 import org.hopeturtles.wrangler.ble.Payloads
 import org.hopeturtles.wrangler.ble.ResultCode
+import org.hopeturtles.wrangler.ble.TrackPoint
+import org.hopeturtles.wrangler.ble.TurtleCodec
 import org.hopeturtles.wrangler.ble.TurtleConnection
 import org.hopeturtles.wrangler.ble.TurtleScanner
 import org.hopeturtles.wrangler.ble.TurtleTelemetry
 import org.hopeturtles.wrangler.ble.TurtleUuids
+import org.hopeturtles.wrangler.data.JourneyRecord
 import org.hopeturtles.wrangler.data.JourneyStore
 import org.hopeturtles.wrangler.data.LastSeen
 import org.hopeturtles.wrangler.data.LastSeenStore
@@ -39,6 +43,7 @@ import org.hopeturtles.wrangler.data.StampEntry
 import org.hopeturtles.wrangler.data.StampLogStore
 import org.hopeturtles.wrangler.ui.Format
 import org.hopeturtles.wrangler.ui.Geo
+import org.hopeturtles.wrangler.ui.activeTarget
 import org.hopeturtles.wrangler.ui.clockHm
 import org.hopeturtles.wrangler.ui.tzLabel
 import java.util.TimeZone
@@ -102,9 +107,28 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
     private val _trail = MutableStateFlow<List<LatLon>>(emptyList())
     val trail: StateFlow<List<LatLon>> = _trail.asStateFlow()
 
-    /** journey_id → where it left from, for journeys this phone started (see [JourneyStore]). */
-    private val _departures = MutableStateFlow<Map<Long, LatLon>>(emptyMap())
-    val departures: StateFlow<Map<Long, LatLon>> = _departures.asStateFlow()
+    /** The connected turtle's journey log, newest first (see [JourneyRecord]). */
+    private val _journeys = MutableStateFlow<List<JourneyRecord>>(emptyList())
+    val journeys: StateFlow<List<JourneyRecord>> = _journeys.asStateFlow()
+
+    /** False until this turtle's log has loaded; journeys aren't tracked before. */
+    private var journeysLoaded = false
+
+    /** Journey files are written one at a time, in order, off the main thread. */
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    private val journeyIo = Dispatchers.IO.limitedParallelism(1)
+
+    /** Turtle clock of the open journey's last write, to save its "last seen" now and then. */
+    private var journeySavedAt = 0L
+
+    /** Journey sync with the turtle (turtleOS 2.6.0+, see [syncJourneys]): one at a time. */
+    private var syncJob: Job? = null
+    /** The turtle's newest ended journey already merged (`0119` last_journey_id). */
+    private var syncedLastEnded: Long? = null
+    /** The open journey whose turtle track was pulled this connection. */
+    private var backfilledOpen: Long? = null
+    /** After a failed sync (e.g. not paired yet), wait before trying again. */
+    private var syncRetryAtMs = 0L
 
     /** Turtle clock minus phone clock (ms), from the last `device_now`. */
     private var clockOffsetMs: Long? = null
@@ -148,8 +172,19 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
         _envHistory.value = emptyList()
         _stampLog.value = stampStore.load(t.address)
         _trail.value = emptyList()
-        _departures.value = journeyStore.load(t.address)
+        _journeys.value = emptyList()
+        journeysLoaded = false
+        syncJob?.cancel()
+        syncedLastEnded = null
+        backfilledOpen = null
+        syncRetryAtMs = 0L
         clockOffsetMs = null
+        viewModelScope.launch {
+            val log = kotlinx.coroutines.withContext(journeyIo) { journeyStore.load(t.address) }
+            if (_connection.value !== link) return@launch
+            _journeys.value = log
+            journeysLoaded = true
+        }
         historyJob = viewModelScope.launch {
             var last: Any? = null
             var lastEnv: Any? = null
@@ -173,6 +208,8 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
                     stampStore.markSent(link.device.address, sh.lastShoreSync, t.status?.queueCount)
                         ?.let { _stampLog.value = it }
                 }
+                trackJourneys(link.device.address, t)
+                maybeSyncJourneys(link, t)
                 val e = t.environment
                 if (e != null && e !== lastEnv) {
                     lastEnv = e
@@ -203,6 +240,7 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun disconnect() {
+        syncJob?.cancel()
         snapshotJob?.cancel()
         historyJob?.cancel()
         servoJob?.cancel()
@@ -394,15 +432,168 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
             when {
                 r.code.ok -> {
                     val id = Payloads.journeyId(r.payload)
-                    val p = link.telemetry.value.position?.takeIf { it.hasFix }
-                    if (id != null && p != null)
-                        _departures.value = journeyStore.add(link.device.address, id, LatLon(p.lat!!, p.lon!!))
+                    val tel = link.telemetry.value
+                    val p = tel.position?.takeIf { it.hasFix }
+                    if (id != null && p != null && journeysLoaded) {
+                        val r0 = _journeys.value.find { it.id == id } ?: JourneyRecord(id)
+                        putJourney(link.device.address, r0.copy(departure = LatLon(p.lat!!, p.lon!!),
+                            destination = activeTarget(tel.targets) ?: r0.destination))
+                    }
                     say("Journey started" + (id?.let { " at " + clockHm(it) } ?: "") +
                         ". Every reading is tagged until you end it.", true)
                 }
                 r.code == ResultCode.WRONG_STATE -> say("A journey is already open on the turtle.", false)
                 else -> say("Couldn't start the journey: ${r.message}", false)
             }
+        }
+    }
+
+    /**
+     * JOURNEY_END. The turtle stamps its arrival from its GPS (if it has a
+     * fix); the phone logs the turtle's position from the same moment.
+     */
+    fun endJourney() {
+        val link = _connection.value ?: return
+        val jid = link.telemetry.value.shore?.journeyId
+        command("End journey", Op.JOURNEY_END) { r ->
+            val stamped = if (r.code.ok) Payloads.arrivalStamped(r.payload) else null
+            if (r.code.ok && jid != null && journeysLoaded) {
+                _journeys.value.find { it.id == jid && !it.ended }?.let { j ->
+                    val p = link.telemetry.value.position?.takeIf { it.hasFix && stamped == true }
+                    putJourney(link.device.address, j.copy(endedAt = turtleNow(), endSeen = true,
+                        lastSeenAt = turtleNow(), arrival = p?.let { LatLon(it.lat!!, it.lon!!) }))
+                }
+            }
+            when {
+                r.code.ok && stamped == false -> say("Journey ended — arrival point not recorded (no GPS).", true)
+                r.code.ok -> say("Journey ended. Arrival point recorded.", true)
+                r.code == ResultCode.WRONG_STATE -> say("No journey is open on the turtle.", false)
+                else -> say("Couldn't end the journey: ${r.message}", false)
+            }
+        }
+    }
+
+    /** The turtle's clock now (unix s), from the last `device_now`; the phone's without one. */
+    private fun turtleNow(): Long = (System.currentTimeMillis() + (clockOffsetMs ?: 0)) / 1000
+
+    /**
+     * Keep the journey log in step with the turtle (Status bit 3 + Shore
+     * `journey_id`): log the open journey's route and destination, and
+     * close any journey the turtle has ended. An end is "seen" when this
+     * phone had the journey in view within [END_SEEN_S]; otherwise it ended
+     * while the phone was away, some time after it was last seen open.
+     */
+    private fun trackJourneys(address: String, t: TurtleTelemetry) {
+        if (!journeysLoaded) return
+        val st = t.status ?: return
+        val open = if (st.journeyActive) t.shore?.journeyId ?: return else null
+        val now = turtleNow()
+        val here = t.position?.takeIf { it.hasFix && !Format.fixStale(it) }?.let { LatLon(it.lat!!, it.lon!!) }
+        _journeys.value.filter { !it.ended && it.id != open }.forEach { j ->
+            val seen = now - j.lastSeenAt <= END_SEEN_S
+            putJourney(address, j.copy(endedAt = now, endSeen = seen, arrival = if (seen) here else null))
+        }
+        if (open == null) return
+        val old = _journeys.value.find { it.id == open }
+        if (old?.ended == true) return
+        val base = old ?: JourneyRecord(open)
+        var j = base.copy(lastSeenAt = now, destination = activeTarget(t.targets) ?: base.destination)
+        // turtleOS 2.6.0: the departure the turtle stamped, even for a journey started on its screen.
+        t.journey?.takeIf { it.openId == open }?.departure?.let { j = j.copy(departure = it, departureFromTurtle = true) }
+        here?.let { p -> j.withPoint(p, now, TRAIL_STEP_M, TRACK_MAX)?.let { j = it } }
+        val changed = old == null || j.track !== old.track || j.destination != old.destination ||
+            j.departure != old.departure
+        if (changed || now - journeySavedAt >= SEEN_SAVE_S) putJourney(address, j)
+        else _journeys.value = _journeys.value.map { if (it.id == open) j else it }
+    }
+
+    /**
+     * Pull the turtle's own journey records (turtleOS 2.6.0, `0119` present)
+     * when there's something new: a newly ended journey (`last_journey_id`
+     * changed), or an open journey whose earlier track this phone hasn't
+     * seen. Quiet: no notice, no busy state, nothing asked of the user; a
+     * failure (not paired yet, link gone) just waits [SYNC_RETRY_MS].
+     */
+    private fun maybeSyncJourneys(link: TurtleConnection, t: TurtleTelemetry) {
+        if (!journeysLoaded || syncJob?.isActive == true) return
+        val ji = t.journey ?: return
+        val st = link.state.value
+        if (st !is LinkState.Ready || st.readOnly) return
+        if (System.currentTimeMillis() < syncRetryAtMs) return
+        val list = ji.lastEndedId != null && ji.lastEndedId != syncedLastEnded
+        val open = ji.openId?.takeIf { it != backfilledOpen }
+        if (!list && open == null) return
+        syncJob = viewModelScope.launch {
+            val ok = syncJourneys(link, ji.lastEndedId.takeIf { list }, open)
+            if (!ok) syncRetryAtMs = System.currentTimeMillis() + SYNC_RETRY_MS
+        }
+    }
+
+    /**
+     * The sync itself. Ended journeys come newest first from JOURNEY_LIST;
+     * each new one is merged ([JourneyRecord.withTurtle]) with its track
+     * ([JourneyRecord.withTurtlePoints]), stopping at the first one already
+     * merged with its track. Then the open journey's track so far. Returns
+     * false if the turtle stopped answering.
+     */
+    private suspend fun syncJourneys(link: TurtleConnection, lastEnded: Long?, open: Long?): Boolean {
+        val c = client ?: return false
+        val address = link.device.address
+        if (lastEnded != null) {
+            var i = 0
+            var count = 1
+            while (i < count) {
+                val r = c.send(Op.JOURNEY_LIST, Payloads.journeyList(i))
+                if (r.code == ResultCode.BAD_VALUE) break                    // past the end
+                if (!r.code.ok) return false
+                val (n, tj) = TurtleCodec.journeyListResult(r.payload) ?: return false
+                count = n
+                val have = _journeys.value.find { it.id == tj.id }
+                if (have != null && have.turtle && have.turtleTrack) break    // older ones are done
+                val pts = fetchTrack(c, tj.id)
+                // Re-read: the live tracker may have touched it while we waited.
+                var rec = (_journeys.value.find { it.id == tj.id } ?: JourneyRecord(tj.id)).withTurtle(tj)
+                if (pts != null) rec = rec.withTurtlePoints(pts, TRACK_MAX).copy(turtleTrack = true)
+                if (_connection.value !== link) return false
+                putJourney(address, rec)
+                i++
+            }
+            syncedLastEnded = lastEnded
+        }
+        if (open != null) {
+            val pts = fetchTrack(c, open) ?: return false
+            if (_connection.value !== link) return false
+            val cur = _journeys.value.find { it.id == open } ?: JourneyRecord(open)
+            putJourney(address, cur.withTurtlePoints(pts, TRACK_MAX))
+            backfilledOpen = open
+        }
+        return true
+    }
+
+    /** Every JOURNEY_TRACK page of journey [id], or null if the turtle refused. */
+    private suspend fun fetchTrack(c: CommandClient, id: Long): List<TrackPoint>? {
+        val out = ArrayList<TrackPoint>()
+        var start = 0
+        while (true) {
+            val r = c.send(Op.JOURNEY_TRACK, Payloads.journeyTrack(id, start))
+            if (!r.code.ok) return null
+            val page = TurtleCodec.journeyTrackResult(r.payload) ?: return null
+            out += page.points
+            start += page.n
+            if (page.n == 0 || start >= page.total) return out
+        }
+    }
+
+    /** Add or replace [j] in the log (newest first, at most [JourneyStore.MAX]) and write it. */
+    private fun putJourney(address: String, j: JourneyRecord) {
+        val all = (_journeys.value.filter { it.id != j.id } + j).sortedByDescending { it.id }
+            .take(JourneyStore.MAX)
+        _journeys.value = all
+        journeySavedAt = turtleNow()
+        val keep = all.map { it.id }
+        viewModelScope.launch(journeyIo) {
+            journeyStore.save(address, j)
+            journeyStore.prune(address, keep)
         }
     }
 
@@ -480,5 +671,9 @@ class WranglerViewModel(app: Application) : AndroidViewModel(app) {
         const val HISTORY_MAX = 2_880          // 4 h at the Power characteristic's 5 s rate
         const val TRAIL_STEP_M = 5L            // GPS jitter at rest stays under this
         const val TRAIL_MAX = 5_000
+        const val TRACK_MAX = 4_000            // per journey; thinned, not cut, when full
+        const val END_SEEN_S = 120L            // ended within this of being seen open = seen
+        const val SEEN_SAVE_S = 60L
+        const val SYNC_RETRY_MS = 60_000L
     }
 }

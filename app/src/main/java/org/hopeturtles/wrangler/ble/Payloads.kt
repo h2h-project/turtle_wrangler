@@ -18,6 +18,13 @@ object Payloads {
         return le(8).putInt((lat * 1e7).roundToInt()).putInt((lon * 1e7).roundToInt()).array()
     }
 
+    /** JOURNEY_LIST `<B>` index, 0 = the newest ended journey. */
+    fun journeyList(index: Int): ByteArray = byteArrayOf(index.coerceIn(0, 255).toByte())
+
+    /** JOURNEY_TRACK `<IH>` journey id (0 = the open one), first point wanted. */
+    fun journeyTrack(id: Long, start: Int): ByteArray =
+        le(6).putInt(id.toInt()).putShort(start.coerceIn(0, 0xFFFF).toShort()).array()
+
     /** SERVO_SET_ANGLE `<B>` 0..180 (clamped). */
     fun servoAngle(deg: Int): ByteArray = byteArrayOf(deg.coerceIn(0, 180).toByte())
 
